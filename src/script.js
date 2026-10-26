@@ -511,6 +511,15 @@ Rules:
             return !(host === "localhost" || host.endsWith(".localhost") || /^127\./.test(host) || host === "[::1]" || host === "::1");
         }
 
+        // fetch() for the endpoint. Chrome's Local Network Access lets an https page reach a
+        // plain-http server on the LAN after a permission prompt, but only when it knows the
+        // target is local before resolving it: a private IP literal or a .local name on its
+        // own, any other hostname (pc.fritz.box) only with targetAddressSpace. A request the
+        // field can't help was blocked as mixed content anyway; other browsers ignore it.
+        function endpointFetch(url, init) {
+            return fetch(url, isBlockedMixedContent(url) ? { ...init, targetAddressSpace: "local" } : init);
+        }
+
         // One line of "what to do about it" shown under a failed reply; the raw error stays
         // visible above it. Replaces a fixed "is your local server running / CORS?" line that
         // was wrong for every failure except a network error, and meaningless for the
@@ -548,7 +557,7 @@ Rules:
             // Chrome says "Failed to fetch", Firefox "NetworkError when attempting to fetch
             // resource", Safari "Load failed" — all of them hide the actual reason.
             if (/Failed to fetch|NetworkError|^Load failed$/i.test(msg)) {
-                if (mixedContent) return "This page is served over https, so the browser blocks plain-http servers on your network — use localhost, an https endpoint, or open HermitUI over http.";
+                if (mixedContent) return "This page is served over https and the server over plain http — Chrome lets that through once you allow local network access (also in its site settings); other browsers block it, so open HermitUI over http or give the server https (README: “A server on another device”).";
                 return isLocalEndpoint(apiUrl)
                     ? `Couldn't reach ${apiUrl} — make sure the server is running and allows CORS from this page.`
                     : `Couldn't reach ${apiUrl} — check the URL and your connection; the provider must also allow requests from a browser (CORS).`;
@@ -700,7 +709,7 @@ Rules:
             const root = apiRoot(url);
             const headers = { "Authorization": "Bearer " + key };
             try {
-                const res = await fetch(root + "/props", { headers });
+                const res = await endpointFetch(root + "/props", { headers });
                 if (res.ok) {
                     const p = await res.json();
                     const caps = p.chat_template_caps;
@@ -723,7 +732,7 @@ Rules:
                 }
             } catch (e) { /* no /props here — try Ollama next */ }
             try {
-                const res = await fetch(root + "/api/show", {
+                const res = await endpointFetch(root + "/api/show", {
                     method: "POST",
                     headers: Object.assign({ "Content-Type": "application/json" }, headers),
                     body: JSON.stringify({ model }),
@@ -2109,7 +2118,7 @@ Rules:
                 let currentKey = document.getElementById("settingApiKey").value.trim();
                 const modelsUrl = apiEndpoint(normalizeApiUrl(document.getElementById("settingUrl").value), "/models");
 
-                const response = await fetch(modelsUrl, {
+                const response = await endpointFetch(modelsUrl, {
                     method: "GET",
                     headers: { "Authorization": "Bearer " + currentKey }
                 });
@@ -3181,7 +3190,7 @@ Rules:
             const chatUrl = apiEndpoint(API_URL, "/chat/completions");
 
             try {
-                const postChat = (body) => fetch(chatUrl, {
+                const postChat = (body) => endpointFetch(chatUrl, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + API_KEY },
                     body: JSON.stringify(body),

@@ -290,6 +290,27 @@ If HermitUI fails to connect to your local AI server (e.g., a "Network Error"), 
 *   **Ollama:** set `OLLAMA_ORIGINS` before starting, e.g. `OLLAMA_ORIGINS="*" ollama serve`.
 *   **vLLM:** allows all origins out of the box — if you narrowed it, widen `--allowed-origins` (it takes a JSON array, e.g. `'["*"]'`).
 
+### A server on another device (phone, tablet, second PC)
+
+The model can run on one computer and HermitUI on another device, a phone on the same Wi-Fi for example. Two things have to be in place.
+
+**1. The server listens on the network**, not only on `localhost`, and allows browser requests:
+
+| Server | Listen on the network | Allow browser requests (CORS) |
+|---|---|---|
+| llama.cpp | `--host 0.0.0.0` | on by default |
+| Ollama | `OLLAMA_HOST=0.0.0.0` | `OLLAMA_ORIGINS="*"` |
+| LM Studio | "Serve on Local Network" | the CORS toggle |
+| vLLM | `--host 0.0.0.0` | on by default |
+
+The computer's firewall has to let the port through. Anyone on that network can then use the model, so set an API key (`llama-server --api-key …`) if that matters.
+
+**2. The page and the server get past mixed content.** The hosted page (`https://moooff.github.io/HermitUI/`) is served over https, and browsers block an https page from calling a plain `http://` address, except `localhost` on the same device. Three ways around it:
+
+*   **Chrome asks instead of blocking.** It shows a prompt to allow access to devices on your local network (desktop Chrome since version 142); allow it, or later in the site settings. That covers private IP addresses and other names on your network. Safari and Firefox block the request.
+*   **Open HermitUI over http, from the server itself.** An http page may call an http server, in every browser. llama.cpp can serve the page: put `hermit-ui-standalone.html` into a folder as `index.html` and start the server with `--path <that folder>`. On the other device, open `http://<server-ip>:<port>/` and set the API URL to `http://<server-ip>:<port>/v1/chat/completions`. For other servers any static file server does, e.g. `python3 -m http.server 8000 --bind 0.0.0.0` in `dist/`; Ollama then needs that page's origin in `OLLAMA_ORIGINS` (or `*`).
+*   **Give the server https.** With [Tailscale](https://tailscale.com/) on both devices, `tailscale serve --bg <port>` publishes the server as `https://<computer>.<tailnet>.ts.net` with a valid certificate: the hosted page works unchanged, and away from home as well. A reverse proxy (Caddy, nginx) with a certificate the device trusts works too.
+
 ## ✨ Features
 
 *   **📦 Zero-dependency setup:** all external libraries (Marked.js, DOMPurify, Highlight.js, KaTeX, Mermaid) and the Inter font are bundled directly into the file. No installation, no build step. (A CDN-linked developer version lives in `dist/hermit-ui-cdn.html`.)

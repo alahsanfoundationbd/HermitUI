@@ -78,6 +78,8 @@ ${fn("detectCloudProvider")}
 ${fn("isLocalEndpoint")}
 ${fn("describeRemoteEndpoint")}
 ${fn("chatErrorHint")}
+${fn("isBlockedMixedContent")}
+${fn("endpointFetch")}
 ${fn("isTextFile")}
 ${fn("isImageFile")}
 ${fn("modelSupportsVision")}
@@ -94,6 +96,7 @@ export {
     parseThinkSegments, buildFinalHistory, createThrottle, apiEndpoint, apiRoot, normalizeApiUrl, localIsoDate,
     parseReasoningTemplateSupport, buildReasoningParams,
     detectCloudProvider, isLocalEndpoint, describeRemoteEndpoint, chatErrorHint,
+    isBlockedMixedContent, endpointFetch,
     isTextFile, isImageFile, modelSupportsVision,
     modelReportsVision, extractModelId, normalizeGgufUrl, ggufFileName, detectTemplateFromArch,
     buildWllamaPrompt,

@@ -14,7 +14,7 @@ const {
     modelReportsVision, extractModelId, normalizeGgufUrl, ggufFileName, detectTemplateFromArch,
     IMAGE_NOTE, withImageNote,
     buildWllamaPrompt, apiRoot, parseReasoningTemplateSupport, buildReasoningParams,
-    chatErrorHint,
+    chatErrorHint, isBlockedMixedContent, endpointFetch,
 } = H;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -484,11 +484,39 @@ section("14. chat error hints");
         api("Failed to fetch", { apiUrl: "https://api.openai.com/v1" }));
     check("blocked mixed content wins over the generic network hint",
         /https/.test(api("Failed to fetch", { mixedContent: true })) && !/CORS/.test(api("Failed to fetch", { mixedContent: true })));
+    check("the mixed-content hint names Chrome's prompt and the ways around it",
+        /local network access/.test(api("Failed to fetch", { mixedContent: true }))
+        && /over http/.test(api("Failed to fetch", { mixedContent: true })) && /https/.test(api("Failed to fetch", { mixedContent: true })));
     check("\"Load failed\" only matches as the whole message",
         !/CORS/.test(api("Load failed: model file missing")), api("Load failed: model file missing"));
 
     check("works with no options object", typeof chatErrorHint("Failed to fetch") === "string");
     check("tolerates an undefined message", chatErrorHint(undefined, { backend: "api" }) === "");
+}
+
+section("15. local network requests from an https page");
+{
+    // Both read the page's scheme from `location`, and endpointFetch calls `fetch`: stub them.
+    const realFetch = globalThis.fetch;
+    let seen = null;
+    globalThis.fetch = (url, init) => { seen = init; return Promise.resolve(url); };
+    const on = (protocol, url, init) => { globalThis.location = { protocol }; seen = undefined; endpointFetch(url, init); return seen; };
+    const init = { method: "POST", headers: { a: "1" } };
+
+    check("an https page calling a plain-http LAN name asks Chrome for local network access",
+        on("https:", "http://pc.fritz.box:8080/v1/chat/completions", init).targetAddressSpace === "local");
+    check("…and keeps the request's own options", on("https:", "http://192.168.1.20:8080/v1/models", init).method === "POST"
+        && on("https:", "http://192.168.1.20:8080/v1/models", init).headers.a === "1");
+    check("…without changing the caller's object", !("targetAddressSpace" in init));
+    check("loopback needs no permission", on("https:", "http://localhost:8080/v1/models", init) === init
+        && on("https:", "http://127.0.0.1:8080/v1/models", init) === init);
+    check("an https endpoint is left alone", on("https:", "https://api.openai.com/v1/models", init) === init);
+    check("an http page is never blocked, so it is left alone", on("http:", "http://192.168.1.20:8080/v1/models", init) === init
+        && on("file:", "http://192.168.1.20:8080/v1/models", init) === init);
+    check("isBlockedMixedContent agrees", isBlockedMixedContent("http://192.168.1.20:8080") === false
+        && (globalThis.location = { protocol: "https:" }, isBlockedMixedContent("http://192.168.1.20:8080")));
+    globalThis.fetch = realFetch;
+    delete globalThis.location;
 }
 
 report();

@@ -37,7 +37,10 @@ since a malformed prompt only shows up as a model answering badly). Section 10 c
 `chatErrorHint`, the one-line advice under a failed reply: each failure class (dead
 in-browser engine, 401/403, 404, 429, 5xx, context overflow, each browser's wording of a
 network error, blocked mixed content) must get its own hint, and none may fall back to the
-old "is your local server running?" line where it doesn't apply.
+old "is your local server running?" line where it doesn't apply. Section 15 covers
+`endpointFetch`: only an https page calling a non-loopback `http://` endpoint gets
+`targetAddressSpace: "local"` (Chrome's local network permission), on a copy of the
+request's options.
 
 ## Export/Import round-trip — `export-import.test.mjs`
 
