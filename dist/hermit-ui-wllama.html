@@ -5502,7 +5502,10 @@ Rules:
                 showToast(`✅ Connection successful! Found ${models.length} models.`);
             } catch (error) {
                 console.error("Test connection failed:", error);
-                const baseUrl = document.getElementById("settingUrl").value.trim();
+                // The URL the request went to: typed without a scheme, a LAN address got
+                // http:// there, and only that one shows as mixed content.
+                let baseUrl = document.getElementById("settingUrl").value.trim();
+                try { baseUrl = normalizeApiUrl(baseUrl); } catch { /* empty: keep it */ }
                 const hint = chatErrorHint(error.message, {
                     backend: "api", apiUrl: baseUrl, mixedContent: isBlockedMixedContent(baseUrl),
                 });
