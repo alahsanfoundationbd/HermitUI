@@ -197,6 +197,19 @@ poll with `page.evaluate` instead.
   end, and a form may come back. Told to word every one differently, the model put a
   speaker on plain facts ("We noticed you save money on heating") and reached for "you'll
   come to notice"; an unreadable answer keeps the rule with all three.
+- **Small models and Rewrite whole text (2026-10-26, v0.4.7, one English and one German
+  text each, on llama-server).** With thinking on (English with Plainer), Qwen3.5-4B,
+  Qwen3.5-9B and Gemma-4-12B think until the token limit in 4-6 of the passes (Gemma
+  loops on "One more check: ... None."); a pass cut off there returns nothing and is
+  lost. The lab capped each reply at about 10,500 tokens; the app sends no `max_tokens`
+  on a server, so there such a pass runs until the context is full. Qwen3-4B did not
+  loop. The model in the tab never thinks, so this is the server path only; English in
+  the tab is still unmeasured. German (no thinking) was quick, and Gemma-4-12B wrote it
+  about as well as Qwen3.8-27B. Qwen3.5-9B dropped a whole point, Qwen3.5-4B repeated
+  sentences and flipped meanings, and Qwen3-4B's rewrite was refused three times as
+  barely changed, so the German text came back as it was. In the sentence-by-sentence
+  Reword (`bench/bench.py`, 1 run) all of them were usable; only Gemma-4-12B had no real
+  defect, and both Qwen3 models flipped "unterschätzen" again.
 - **Checks shared by the passes.** `acceptWholeRewrite` refuses a later pass (not the
   fix) that starts more sentences in a row with the same two words than its input had,
   three or more (`sameOpenerRun`): "You can see ... You can download ..." is a list
