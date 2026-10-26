@@ -100,7 +100,7 @@ See [tests/README.md](tests/README.md). The page's CSP blocks `eval`, so Playwri
 | `buildReasoningParams` | `script.js` | `28483fc` | external-endpoint path only (no wllama kwargs path) |
 | `probeReasoningSupport` | `script.js` | `28483fc` | returns levels plus the context size and where it came from: llama.cpp's `n_ctx`, Ollama's `num_ctx`, else the model list (vLLM, LM Studio, OpenRouter-style); runs automatically before the first request |
 | `fetchAndStreamChat` → `streamChat` | `script.js` | `28483fc` | API path only; returns `{finishReason, usage, rawUsage, timings, clock}` instead of callbacks; strip-and-retry of reasoning params kept; a stream that ends without `finish_reason`/`[DONE]`, an empty answer, or 3 min of silence after data started throw retryable errors (`requestWithRetry`) |
-| Test Connection handler → `testConnection` | `script.js` | `28483fc` | no vision detection; also probes reasoning support |
+| Test Connection handler → `testConnection` | `script.js` | `28483fc`, hint URL `d73993c` | no vision detection; also probes reasoning support |
 | `showToast` | `script.js` | `28483fc` | unchanged |
 | Debug console (`setDebugConsole`, `#debugConsole` markup and CSS) | `script.js`, `index.html`, `style.css` | `28483fc` | logs agent tool calls instead of wllama output; filter instead of verbosity; no tab, Escape closes |
 | `tests/check.mjs`, `tests/run.mjs`, the `extract.mjs` approach | `../tests/` | `28483fc` | extractor also slices `async function`s |

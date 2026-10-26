@@ -31,7 +31,7 @@
   </a>
 </div>
 
-> **Status: v0.3.23** (Phase 3.7, a plan you can see). One self-contained HTML file,
+> **Status: v0.3.24** (Phase 3.7, a plan you can see). One self-contained HTML file,
 > [`dist/hermit-agent-standalone.html`](dist/hermit-agent-standalone.html) (about 11 MB,
 > Python included). It is developed here, separately from the main app in
 > [`../src/`](../src/), so it can move fast without destabilising HermitUI.

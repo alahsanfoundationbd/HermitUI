@@ -13,7 +13,7 @@
 // of this file by name.
 
 // ========== 1. Configuration ==========
-const APP_VERSION = "0.3.23";
+const APP_VERSION = "0.3.24";
 const PYODIDE_VERSION = "0.29.5";
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.29.5/full/";
 // Pure-Python libraries bundled into the HTML (Phase 3.5, DESIGN §8). Pyodide leaves
@@ -6517,7 +6517,10 @@ async function testConnection() {
         $("reasoningStatus").textContent = `Reasoning control: ${r.state} (${r.source}) · ` + (r.nCtx ? `context ${r.nCtx.toLocaleString("en-US")} tokens (${r.ctxSource})` : "context size not reported: set it below for auto-compaction") + " · " + toolSupportText(r);
         showToast(`✅ Connection successful! Found ${models.length} model${models.length === 1 ? "" : "s"}.`);
     } catch (error) {
-        const baseUrl = $("settingUrl").value.trim();
+        // The URL the request went to: typed without a scheme, a LAN address got http://
+        // there, and only that one shows as mixed content.
+        let baseUrl = $("settingUrl").value.trim();
+        try { baseUrl = normalizeApiUrl(baseUrl); } catch { /* empty: keep it */ }
         const hint = chatErrorHint(error.message, { apiUrl: baseUrl, mixedContent: isBlockedMixedContent(baseUrl) });
         showToast(`❌ Connection failed: ${error.message}${hint ? "\n" + hint : ""}`, { error: true });
     } finally {
