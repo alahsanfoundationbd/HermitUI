@@ -316,6 +316,59 @@
         }
         .mermaid-diagram svg { max-width: 100%; height: auto; }
 
+        /* Rendered diagrams (mermaid, ```svg) with their source one click away. */
+        .diagram-block { position: relative; margin: 12px 0; }
+        .diagram-block > .mermaid-diagram, .diagram-block > .svg-diagram { margin: 0; }
+        .diagram-block > pre { display: none; }
+        .diagram-block.show-source > pre { display: block; margin: 0; }
+        .diagram-block.show-source > .mermaid-diagram,
+        .diagram-block.show-source > .svg-diagram { display: none; }
+        .diagram-toggle {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            z-index: 1;
+            font-size: 0.75rem;
+            font-family: 'Inter', system-ui, sans-serif;
+            padding: 2px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: rgba(255,255,255,0.85);
+            color: #6b7280;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .diagram-block:hover > .diagram-toggle, .diagram-toggle:focus-visible,
+        .diagram-block.show-source > .diagram-toggle { opacity: 1; }
+        .diagram-toggle:hover { color: var(--primary); border-color: var(--primary); }
+        /* A source view puts the toggle over the code's own Copy button: move it left. */
+        .diagram-block.show-source > .diagram-toggle { right: 64px; }
+        /* SVGs are mostly drawn for a white page, so they get one in both themes. */
+        .svg-diagram {
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        .svg-image { max-width: 100%; max-height: 70vh; height: auto; }
+
+        /* 📄 Raw: the reply as written, in place of the rendered one. */
+        .msg-wrapper.show-raw .ai-response-body { display: none; }
+        .raw-output {
+            margin: 0;
+            padding: 16px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            direction: ltr;
+            text-align: left;
+        }
+
         /* Math (KaTeX → native MathML) */
         .math-block { text-align: center; }
         math { font-size: 1.05em; }
@@ -1297,6 +1350,12 @@
             color: var(--text-soft);
         }
         :root[data-theme="dark"] .ctx-bar { background: rgba(255,255,255,0.12); }
+        :root[data-theme="dark"] .diagram-toggle {
+            background: rgba(30, 41, 59, 0.9);
+            border-color: var(--border-strong);
+            color: var(--text-soft);
+        }
+        :root[data-theme="dark"] .svg-diagram { border-color: var(--border-strong); }
         :root[data-theme="dark"] .branch-nav { color: var(--text-soft); }
         :root[data-theme="dark"] .branch-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); }
         :root[data-theme="dark"] .edit-notice {

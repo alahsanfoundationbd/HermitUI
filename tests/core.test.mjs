@@ -16,6 +16,7 @@ const {
     buildWllamaPrompt, apiRoot, parseReasoningTemplateSupport, buildReasoningParams,
     chatErrorHint, isBlockedMixedContent, endpointFetch,
     stripReasoning, buildSamplingParams, readContextSize, contextGauge,
+    splitForContinue, continuedAnswer,
 } = H;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -573,6 +574,31 @@ section("19. context gauge");
     check("full from 90%, capped at 100", contextGauge(20000, 16384).level === "full" && contextGauge(20000, 16384).pct === 100);
     check("small numbers stay exact", contextGauge(999, 49152).text === "999 / 49k", contextGauge(999, 49152).text);
     check("1000 reads 1k, not 1.0k", contextGauge(1000, 4096).text === "1k / 4.1k", contextGauge(1000, 4096).text);
+}
+
+section("20. continuing a reply");
+{
+    const plain = splitForContinue("1, 2, 3,");
+    check("no reasoning: the whole reply is the prefill", plain.head === "" && plain.prefill === "1, 2, 3,", JSON.stringify(plain));
+    const thought = splitForContinue("<think>\nplan\n</think>\n\nThe answer is");
+    check("reasoning stays in the head, the answer is the prefill",
+        thought.head === "<think>\nplan\n</think>\n\n" && thought.prefill === "The answer is", JSON.stringify(thought));
+    check("head + prefill is the reply, byte for byte",
+        thought.head + thought.prefill === "<think>\nplan\n</think>\n\nThe answer is");
+    check("stopped mid-thought: nothing to continue", splitForContinue("<think>still going") === null);
+    check("reasoning but no answer yet: nothing to continue", splitForContinue("<think>done</think>\n") === null);
+    check("not a string: nothing to continue", splitForContinue([{ type: "text", text: "x" }]) === null);
+
+    check("llama.cpp echoes the prefill: taken as the whole answer",
+        continuedAnswer("1, 2, 3,", "1, 2, 3, 4, 5", true) === "1, 2, 3, 4, 5");
+    check("a server sending only new tokens: appended",
+        continuedAnswer("1, 2, 3,", " 4, 5", true) === "1, 2, 3, 4, 5");
+    check("while the stream could still be the echo, hold it back",
+        continuedAnswer("1, 2, 3,", "1, 2", false) === null);
+    check("…but not once it can't be", continuedAnswer("1, 2, 3,", " 4", false) === "1, 2, 3, 4");
+    check("an echo without the prefill's trailing space still counts",
+        continuedAnswer("five, ", "five, six", true) === "five, six");
+    check("a final short stream is never held back", continuedAnswer("1, 2, 3,", "1", true) === "1, 2, 3,1");
 }
 
 report();

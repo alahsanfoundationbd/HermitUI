@@ -5,7 +5,9 @@ Covers what the unit tests can't reach because it lives in the DOM or the reques
 the llama.cpp samplers reaching the payload only when set, earlier reasoning left out of
 requests on demand, the 🧮 context gauge (window looked up from /props after the first
 reply), and versions: edit and regenerate keep what they replace behind ‹ n/m ›, and a
-regenerate stopped before its first token brings the previous reply back.
+regenerate stopped before its first token brings the previous reply back; ⏩ Continue
+extends the latest reply (with and without llama.cpp's echo of the prefill), and 📄 Raw
+shows it unrendered.
 
 Runs against dist/hermit-ui-standalone.html in headless Chromium. `fetch` is stubbed:
 each chat request answers "Reply N" (or window.__reply when set) with usage numbers, and
@@ -30,6 +32,7 @@ window.__n = 0;
 window.__payloads = [];
 window.__reply = null;   // fixed reply text instead of "Reply N"
 window.__hang = false;   // next chat request streams nothing until aborted
+window.__echo = true;    // a continue streams the prefill back first, as llama.cpp does
 window.fetch = async (url, opts) => {
   url = String(url);
   if (url.endsWith('/props')) {
@@ -45,7 +48,11 @@ window.fetch = async (url, opts) => {
       opts.signal.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError')));
     } }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
   }
-  const text = window.__reply || ('Reply ' + (++window.__n));
+  const msgs = JSON.parse(opts.body).messages;
+  const last = msgs[msgs.length - 1];
+  const text = last.role === 'assistant'
+    ? (window.__echo ? last.content : '') + ' and more.'
+    : (window.__reply || ('Reply ' + (++window.__n)));
   const body = 'data: ' + JSON.stringify({ choices: [{ delta: { content: text } }] }) + '\\n\\n' +
                'data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }],
                                            usage: { prompt_tokens: 3000, completion_tokens: 200 } }) + '\\n\\n' +
@@ -98,6 +105,18 @@ def regenerate(page, nth):
     page.locator(".msg-wrapper.ai").nth(nth).locator(".action-btn", has_text="Regenerate").click()
     page.wait_for_function("() => !document.getElementById('chatForm').classList.contains('is-generating')")
     page.wait_for_timeout(150)
+
+
+def ai_action(page, nth, label):
+    w = page.locator(".msg-wrapper.ai").nth(nth)
+    w.hover()
+    w.locator(".action-btn", has_text=label).click()
+    page.wait_for_function("() => !document.getElementById('chatForm').classList.contains('is-generating')")
+    page.wait_for_timeout(150)
+
+
+def toast(page):
+    return page.inner_text("#toastNotification") if page.locator("#toastNotification").count() else ""
 
 
 def open_settings(page):
@@ -225,6 +244,54 @@ def main():
         check("no empty version left behind",
               page.evaluate("forks.get(messages[1].uid).versions.length") == n_before)
         check("bubbles match the history", len(bubbles(page)) == len(history(page)), bubbles(page))
+
+        section("continue extends the latest reply")
+        page.click("#clearBtn")
+        page.click("#newChatConfirmBtn")
+        send(page, "count")
+        reply = history(page)[-1][2:]
+        ai_action(page, 0, "Continue")
+        sent = last_payload(page)["messages"]
+        check("the reply goes back as a final assistant message",
+              sent[-1] == {"role": "assistant", "content": reply}, sent[-1])
+        check("an echoed prefill isn't doubled", history(page)[-1] == f"a:{reply} and more.", history(page))
+        check("the bubble shows the continued text", bubbles(page)[-1] == f"{reply} and more.", bubbles(page))
+        page.evaluate("window.__echo = false")
+        ai_action(page, 0, "Continue")
+        check("a server sending only new tokens is appended",
+              history(page)[-1] == f"a:{reply} and more. and more.", history(page))
+        page.evaluate("window.__echo = true")
+        send(page, "next")
+        n = page.evaluate("window.__payloads.length")
+        ai_action(page, 0, "Continue")
+        check("an older reply can't be continued", page.evaluate("window.__payloads.length") == n
+              and "latest" in toast(page), toast(page))
+
+        section("reasoning and continue")
+        page.evaluate("window.__reply = '<think>plan</think>Half an ans'")
+        send(page, "think")
+        ai_action(page, 2, "Continue")
+        check("the reasoning stays, the answer is continued",
+              history(page)[-1] == "a:<think>plan</think>Half an ans and more.", history(page))
+        check("only the answer was sent back", last_payload(page)["messages"][-1]["content"] == "Half an ans")
+        page.evaluate("window.__reply = '<think>stopped mid-thought'")
+        send(page, "cut")
+        n = page.evaluate("window.__payloads.length")
+        ai_action(page, 3, "Continue")
+        check("a reply that is only reasoning can't be continued",
+              page.evaluate("window.__payloads.length") == n and "thinking" in toast(page), toast(page))
+        page.evaluate("window.__reply = null")
+
+        section("raw view")
+        w = page.locator(".msg-wrapper.ai").nth(2)
+        w.hover()
+        w.locator(".raw-btn").click()
+        check("raw shows the text as written", "<think>plan</think>" in w.locator(".raw-output").inner_text(),
+              w.locator(".raw-output").count())
+        check("the rendered body is hidden", not w.locator(".ai-response-body").is_visible())
+        check("the button offers the way back", w.locator(".raw-btn").inner_text() == "✨ Rendered")
+        w.locator(".raw-btn").click()
+        check("back to rendered", w.locator(".raw-output").count() == 0 and w.locator(".ai-response-body").is_visible())
 
         browser.close()
 

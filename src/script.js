@@ -269,7 +269,7 @@
             mermaidThemeInit(mermaid);
             for (const code of blocks) {
                 const pre = code.closest('pre');
-                if (!pre || !pre.parentNode) continue;
+                if (!pre || !pre.parentNode || pre.closest('.diagram-block')) continue;
                 const source = code.textContent;
                 const clean = await renderMermaidSvg(mermaid, source);
                 if (clean === null) continue;
@@ -277,8 +277,56 @@
                 wrapper.className = 'mermaid-diagram';
                 wrapper.dataset.mermaidSource = source; // kept so a theme toggle can re-render
                 wrapper.innerHTML = clean;
-                pre.replaceWith(wrapper);
+                wrapDiagram(wrapper, pre);
             }
+        }
+
+        // A rendered diagram keeps its code block beside it, hidden, so the source stays
+        // one click away and its Copy button keeps working.
+        function wrapDiagram(diagram, pre) {
+            const block = document.createElement('div');
+            block.className = 'diagram-block';
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'diagram-toggle';
+            toggle.textContent = '</> Source';
+            toggle.addEventListener('click', () => {
+                const source = block.classList.toggle('show-source');
+                toggle.textContent = source ? '🖼️ Image' : '</> Source';
+            });
+            pre.before(block);
+            block.append(toggle, diagram, pre);
+            return block;
+        }
+
+        // ```svg fences become an image once the message is complete. The source goes
+        // through DOMPurify like everything the model writes, and is then shown as an
+        // <img>: an SVG loaded as an image runs no scripts and fetches nothing, so neither
+        // a script nor an external url() that slipped through could act. Too large, not an
+        // SVG, or not renderable: the code block stays.
+        const SVG_MAX_CHARS = 256 * 1024;
+        function renderSvgBlocks(container) {
+            container.querySelectorAll('pre > code.language-svg').forEach((code) => {
+                const pre = code.closest('pre');
+                if (!pre || pre.closest('.diagram-block')) return;
+                const source = code.textContent;
+                if (source.length > SVG_MAX_CHARS) return;
+                const probe = document.createElement('div');
+                probe.innerHTML = DOMPurify.sanitize(source, { USE_PROFILES: { svg: true, svgFilters: true } });
+                const svg = probe.querySelector('svg');
+                if (!svg) return;
+                // XMLSerializer writes the xmlns an image needs to render at all.
+                const xml = new XMLSerializer().serializeToString(svg);
+                const img = document.createElement('img');
+                img.className = 'svg-image';
+                img.alt = 'SVG image from the reply';
+                const box = document.createElement('div');
+                box.className = 'svg-diagram';
+                box.appendChild(img);
+                const block = wrapDiagram(box, pre);
+                img.addEventListener('error', () => block.replaceWith(pre));
+                img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+            });
         }
 
         // Re-render already-displayed diagrams after a theme toggle (they are
@@ -2845,7 +2893,10 @@ Rules:
 
             // Diagrams only render once the message is complete; while streaming the
             // fence stays visible as a plain code block.
-            if (isFinal) renderMermaidBlocks(ctx.responseContainer);
+            if (isFinal) {
+                renderSvgBlocks(ctx.responseContainer);
+                renderMermaidBlocks(ctx.responseContainer);
+            }
 
             if (!userScrolledUp) {
                 chatbox.scrollTop = chatbox.scrollHeight;
@@ -2870,6 +2921,30 @@ Rules:
             const answer = parseThinkSegments(content, true)
                 .filter(s => s.type === "text").map(s => s.content).join("").trim();
             return answer || content;
+        }
+
+        // Split a reply for ⏩ Continue: everything up to its last reasoning block stays as
+        // it is (head); the answer after it (prefill) goes back as the start of the
+        // assistant turn for the model to carry on from. null when there is no answer yet
+        // (the reply stopped mid-thought), so there is nothing to continue.
+        function splitForContinue(content) {
+            const text = typeof content === "string" ? content : "";
+            const segs = parseThinkSegments(text, true);
+            const last = segs[segs.length - 1];
+            if (!last || last.type !== "text" || !last.content.trim()) return null;
+            const at = text.length - last.content.length;
+            const lead = last.content.match(/^\s*/)[0];
+            return { head: text.slice(0, at) + lead, prefill: last.content.slice(lead.length) };
+        }
+
+        // The continued answer from what streamed back. llama.cpp repeats the prefilled
+        // text before the new tokens, other servers send only the new tokens; both end up
+        // as one answer here. null while the stream could still be the start of that
+        // echo and has to be held back.
+        function continuedAnswer(prefill, received, isFinal) {
+            const p = prefill.trimEnd();
+            if (!isFinal && received.length < p.length && p.startsWith(received)) return null;
+            return p && received.startsWith(p) ? received : prefill + received;
         }
 
         // Request params from the sampling settings. Only what is set, or off its neutral
@@ -3114,8 +3189,10 @@ Rules:
         //   estimatePromptTokens   fallback () => count when the server sends no usage
         //   onFinal(ctx, aborted)  commit the finished (or aborted) text to history
         //   onFailure(error, ctx)  render a non-abort error into the message body
+        //   continueFrom           optional splitForContinue() result: the stream extends
+        //                          that reply instead of starting a new one
         // Resolves with ctx ({aiReasoning, fullRawText, …}) once generation ended.
-        async function runStreamingResponse({ payload, outerEl, bodyEl, estimatePromptTokens, onFinal, onFailure }) {
+        async function runStreamingResponse({ payload, outerEl, bodyEl, estimatePromptTokens, onFinal, onFailure, continueFrom }) {
             inputField.disabled = true;
             sendBtn.style.display = "none";
             stopBtn.style.display = "flex";
@@ -3133,6 +3210,18 @@ Rules:
             };
             let promptTokens = 0;
             let completionTokens = 0;
+            // Answer text as it streams in; for a continued reply ctx.fullRawText is the
+            // original reply extended by it (see continuedAnswer).
+            let received = "";
+            const showReceived = (isFinal) => {
+                if (!continueFrom) { ctx.fullRawText = received; return; }
+                const answer = continuedAnswer(continueFrom.prefill, received, isFinal);
+                ctx.fullRawText = continueFrom.head + (answer === null ? continueFrom.prefill : answer);
+            };
+            if (continueFrom) {
+                showReceived(false);
+                updateMessageUI(ctx, false);
+            }
 
             // Throttled render function (avoids re-parsing markdown 50x/sec)
             const throttledRender = createThrottle(CONSTANTS.THROTTLE_MS);
@@ -3155,7 +3244,7 @@ Rules:
                 // and keep the "(est.)" badge visible for exactly those values.
                 let promptEst = false, completionEst = false;
                 if (completionTokens === 0) {
-                    completionTokens = Math.ceil((ctx.aiReasoning.length + ctx.fullRawText.length) / 4);
+                    completionTokens = Math.ceil((ctx.aiReasoning.length + received.length) / 4);
                     completionEst = true;
                 }
                 if (promptTokens === 0 && estimatePromptTokens) {
@@ -3172,14 +3261,19 @@ Rules:
 
             await fetchAndStreamChat(payload, abortController.signal, {
                 onChunk: (reasoningChunk, contentChunk, pt, ct) => {
-                    if (reasoningChunk) ctx.aiReasoning += reasoningChunk;
-                    if (contentChunk) ctx.fullRawText += contentChunk;
+                    // A continued answer keeps its original reasoning; any new reasoning
+                    // the server reports has no place to go and is dropped.
+                    if (reasoningChunk && !continueFrom) ctx.aiReasoning += reasoningChunk;
+                    if (contentChunk) {
+                        received += contentChunk;
+                        showReceived(false);
+                    }
                     promptTokens = pt;
                     completionTokens = ct;
                     throttledRender(() => {
                         updateMessageUI(ctx, false);
                         const currentDuration = (Date.now() - ctx.startTime) / 1000;
-                        const estTokens = Math.ceil((ctx.aiReasoning.length + ctx.fullRawText.length) / 4);
+                        const estTokens = Math.ceil((ctx.aiReasoning.length + received.length) / 4);
                         const currentTps = currentDuration > 0.2 ? (estTokens / currentDuration).toFixed(1) : "0.0";
                         updateGlobalStats(promptTokens || "...", estTokens, currentTps, currentDuration.toFixed(1), !promptTokens, true);
                     });
@@ -3188,12 +3282,14 @@ Rules:
                     promptTokens = pt;
                     completionTokens = ct;
                     ctx.finishReason = finishReason || null;
+                    showReceived(true);
                     updateMessageUI(ctx, true);
                     onFinal(ctx, false);
                     finishGeneration();
                 },
                 onError: (error) => {
                     if (error.name === 'AbortError') {
+                        showReceived(true);
                         updateMessageUI(ctx, true);
                         onFinal(ctx, true);
                     } else {
@@ -3285,7 +3381,13 @@ Rules:
                     } else {
                         // Manual formatting for template-less models (or an explicit user override).
                         const key = choice === "auto" ? wllamaDetectedTemplate : choice;
-                        const { prompt, stop } = buildWllamaPrompt(key, wllamaMessages);
+                        // ⏩ Continue ends on the partial answer: build the prompt up to a
+                        // fresh assistant turn and write that answer into it, unclosed.
+                        const last = wllamaMessages[wllamaMessages.length - 1];
+                        const continuing = last && last.role === "assistant";
+                        const built = buildWllamaPrompt(key, continuing ? wllamaMessages.slice(0, -1) : wllamaMessages);
+                        const prompt = continuing ? built.prompt + last.content : built.prompt;
+                        const stop = built.stop;
                         wllamaLog("log", `Generating via manual template "${key}" (temp=${temperature}, max_tokens=${maxTokens}, stop=${JSON.stringify(stop)})`);
                         wllamaLog("debug", "Formatted prompt sent to model:\n" + prompt);
                         await wllamaInstance.createCompletion({
@@ -3614,6 +3716,112 @@ Rules:
             }
         });
 
+        // History entries as a request sends them: summaries out, internal bookkeeping
+        // (uid/isSummary) stripped, earlier reasoning dropped when the setting says so.
+        function apiMessagesFrom(history) {
+            return history.filter(m => !m.isSummary).map(({ role, content }) => ({
+                role, content: DROP_REASONING && role === "assistant" ? stripReasoning(content) : content
+            }));
+        }
+
+        function buildChatPayload(apiMessages) {
+            return {
+                model: MODEL_NAME,
+                // wllama flattens images away, so it must not be told it can see them.
+                messages: activeBackend() === "wllama" ? apiMessages : withImageNote(apiMessages),
+                temperature: TEMPERATURE,
+                stream: true,
+                stream_options: { include_usage: true },
+                ...buildSamplingParams({
+                    maxTokens: MAX_TOKENS, topP: TOP_P, presencePenalty: PRESENCE_PENALTY,
+                    frequencyPenalty: FREQUENCY_PENALTY, seed: SEED,
+                    topK: TOP_K, minP: MIN_P, repeatPenalty: REPEAT_PENALTY,
+                }),
+                ...currentReasoningParams()
+            };
+        }
+
+        function estimateTokens(msgs) {
+            // content may be a multimodal array; estimate from text parts only.
+            return Math.ceil(msgs.map(m => contentToText(m.content)).join(" ").length / 4);
+        }
+
+        function recordContextUse(streamCtx) {
+            if (streamCtx.failed || !streamCtx.usage) return;
+            lastContextUse = streamCtx.usage;
+            updateContextGauge();
+            lookupContextSize();
+        }
+
+        // ========== Continue a reply ==========
+        // The latest reply goes back as the start of an assistant turn, and the model
+        // carries on from where it stopped: after the max-tokens cutoff, or after Stop.
+        // Servers that continue a final assistant message do this (llama.cpp, Ollama, the
+        // in-browser model); one that doesn't writes a fresh answer, appended instead.
+        async function continueReply(uid, wrapper) {
+            if (isWaiting) return;
+            const idx = messages.findIndex(m => m.uid === uid);
+            if (idx < 0 || idx !== messages.length - 1) {
+                showToast("⚠️ Only the latest reply can be continued.");
+                return;
+            }
+            const entry = messages[idx];
+            const split = splitForContinue(entry.content);
+            if (!split) {
+                showToast("⚠️ This reply stopped while thinking, so there's no answer to continue yet — regenerate it instead.");
+                return;
+            }
+            setRawView(wrapper, uid, false);
+            const outerEl = wrapper.querySelector(".msg-content");
+            const bodyEl = outerEl.querySelector(".ai-response-body");
+            // Re-rendered from the full text; this also drops an old cutoff notice.
+            bodyEl.innerHTML = "";
+            const apiMessages = apiMessagesFrom(messages.slice(0, idx));
+            apiMessages.push({ role: "assistant", content: split.prefill });
+            userScrolledUp = false;
+
+            const streamCtx = await runStreamingResponse({
+                payload: buildChatPayload(apiMessages),
+                outerEl,
+                bodyEl,
+                continueFrom: split,
+                estimatePromptTokens: () => estimateTokens(apiMessages),
+                onFinal: (ctx) => { entry.content = ctx.fullRawText; },
+                onFailure: (error, ctx) => {
+                    ctx.failed = true;
+                    // Nothing is committed on failure, so show the reply as it still is.
+                    ctx.fullRawText = entry.content;
+                    updateMessageUI(ctx, true);
+                    ctx.responseContainer.insertAdjacentHTML('beforeend', chatErrorHtml(error));
+                }
+            });
+            recordContextUse(streamCtx);
+        }
+
+        // ========== Raw view ==========
+        // A reply exactly as the model wrote it — Markdown, tags and all — in place of the
+        // rendered one.
+        function setRawView(wrapper, uid, on) {
+            const contentEl = wrapper.querySelector(".msg-content");
+            const old = contentEl.querySelector(":scope > .raw-output");
+            if (old) old.remove();
+            const btn = wrapper.querySelector(".raw-btn");
+            if (on) {
+                const entry = messages.find(m => m.uid === uid);
+                if (!entry) {
+                    showToast("⚠️ There's no finished text to show for this reply.");
+                    on = false;
+                } else {
+                    const pre = document.createElement("pre");
+                    pre.className = "raw-output";
+                    pre.textContent = contentToText(entry.content);
+                    contentEl.appendChild(pre);
+                }
+            }
+            wrapper.classList.toggle("show-raw", on);
+            if (btn) btn.textContent = on ? "✨ Rendered" : "📄 Raw";
+        }
+
         // ========== Main Submit Handler ==========
         chatForm.addEventListener("submit", async function(e) {
             e.preventDefault();
@@ -3738,38 +3946,15 @@ Rules:
             // Prepare containers for reasoning and text
             responseContainer.innerHTML = `<div class="ai-response-body"></div>`;
 
-            // Strip internal bookkeeping (uid/isSummary) — servers only see role/content.
-            const apiMessages = messages.filter(m => !m.isSummary).map(({ role, content }) => ({
-                role, content: DROP_REASONING && role === "assistant" ? stripReasoning(content) : content
-            }));
-            const chatPayload = {
-                model: MODEL_NAME,
-                // wllama flattens images away, so it must not be told it can see them.
-                messages: activeBackend() === "wllama" ? apiMessages : withImageNote(apiMessages),
-                temperature: TEMPERATURE,
-                stream: true,
-                stream_options: { include_usage: true },
-                ...buildSamplingParams({
-                    maxTokens: MAX_TOKENS, topP: TOP_P, presencePenalty: PRESENCE_PENALTY,
-                    frequencyPenalty: FREQUENCY_PENALTY, seed: SEED,
-                    topK: TOP_K, minP: MIN_P, repeatPenalty: REPEAT_PENALTY,
-                }),
-                ...currentReasoningParams()
-            };
+            const chatPayload = buildChatPayload(apiMessagesFrom(messages));
             refreshBranchNav();
 
             const streamCtx = await runStreamingResponse({
                 payload: chatPayload,
                 outerEl: responseContainer,
                 bodyEl: responseContainer.querySelector('.ai-response-body'),
-                estimatePromptTokens: () => {
-                    const promptMsgs = messages.length > 0 && messages[messages.length - 1].role === "assistant" ? messages.slice(0, -1) : messages;
-                    // content may be a multimodal array; estimate from text parts only.
-                    const promptStr = promptMsgs.map(m => Array.isArray(m.content)
-                        ? m.content.filter(p => p.type === "text").map(p => p.text).join(" ")
-                        : m.content).join(" ");
-                    return Math.ceil(promptStr.length / 4);
-                },
+                // Called once the reply is in history, so that entry is left out.
+                estimatePromptTokens: () => estimateTokens(messages[messages.length - 1].role === "assistant" ? messages.slice(0, -1) : messages),
                 // Aborted responses keep their partial text in history, as before.
                 onFinal: (ctx) => {
                     // Nothing arrived (aborted before the first token, or an empty
@@ -3790,11 +3975,7 @@ Rules:
             // A regenerate stopped before its first token leaves its fork empty; this
             // brings the previous version back.
             refreshBranchNav();
-            if (!streamCtx.failed && streamCtx.usage) {
-                lastContextUse = streamCtx.usage;
-                updateContextGauge();
-                lookupContextSize();
-            }
+            recordContextUse(streamCtx);
         });
 
         // ========== Append Message ==========
@@ -3903,6 +4084,20 @@ Rules:
                     chatForm.dispatchEvent(new CustomEvent("submit", { cancelable: true, detail: { regenerate: true } }));
                 });
                 actionsDiv.appendChild(regenBtn);
+
+                const continueBtn = document.createElement("button");
+                continueBtn.className = "action-btn";
+                continueBtn.textContent = "⏩ Continue";
+                continueBtn.title = "Let the model carry on writing this reply";
+                continueBtn.addEventListener("click", () => continueReply(msgUid, wrapper));
+                actionsDiv.appendChild(continueBtn);
+
+                const rawBtn = document.createElement("button");
+                rawBtn.className = "action-btn raw-btn";
+                rawBtn.textContent = "📄 Raw";
+                rawBtn.title = "Show the reply as the model wrote it, unrendered";
+                rawBtn.addEventListener("click", () => setRawView(wrapper, msgUid, !wrapper.classList.contains("show-raw")));
+                actionsDiv.appendChild(rawBtn);
             }
             
             contentContainer.appendChild(contentDiv);

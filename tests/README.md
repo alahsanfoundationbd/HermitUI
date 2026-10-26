@@ -43,7 +43,9 @@ old "is your local server running?" line where it doesn't apply. Section 15 cove
 request's options. Sections 16–19 cover `stripReasoning` (earlier reasoning left out of a
 request, but never down to an empty assistant turn), `buildSamplingParams` (only set values
 are sent, a deliberate `top_k: 0` included), `readContextSize` (llama.cpp `/props`, vLLM
-`max_model_len`) and `contextGauge` (labels and the 75%/90% warning levels).
+`max_model_len`) and `contextGauge` (labels and the 75%/90% warning levels). Section 20 covers
+`splitForContinue` and `continuedAnswer`: the reasoning stays put, only the answer goes back,
+and llama.cpp's echo of the prefill is neither doubled nor mistaken for new text.
 
 ## Export/Import round-trip — `export-import.test.mjs`
 
@@ -72,7 +74,9 @@ in `textContent`), remote images being held back behind a click while locally-at
 `data:` images pass through, links getting `target="_blank"`/`rel="noopener noreferrer"`,
 a real trailing `<` surviving the final render, the max-tokens cutoff notice, an invalid
 mermaid diagram degrading to a code block, the New Chat confirmation and composer reset,
-and the privacy banner firing on *any* non-local endpoint rather than a fixed provider list.
+and the privacy banner firing on *any* non-local endpoint rather than a fixed provider list, and
+```` ```svg ```` blocks drawing as an image with scripts and event handlers stripped, non-SVG
+content staying a code block, and the source toggle on SVG and mermaid diagrams.
 
 ## End-to-end — `e2e_export_import.py`
 
@@ -100,7 +104,8 @@ payload only while set, earlier reasoning left out of requests when asked (histo
 it), the 🧮 context gauge (window from a stubbed `/props`), and versions: regenerate and
 edit keep what they replace behind ‹ n/m ›, an edit changes nothing until it is sent, an
 older reply can be regenerated, and a regenerate stopped before its first token brings the
-previous reply back. `fetch` is stubbed: each request answers "Reply N" with usage numbers.
+previous reply back; ⏩ Continue with and without the prefill echoed back, refused for an older
+reply or one that stopped mid-thought; 📄 Raw showing the reply as written. `fetch` is stubbed: each request answers "Reply N" with usage numbers.
 
 **Run `python3 build.py` first** — the end-to-end tests read `dist/`, not `src/`.
 

@@ -136,6 +136,29 @@ def main():
         page.wait_for_timeout(500)
         check("invalid mermaid stays a code block", "<pre" in r["html"], r["html"][:160])
 
+        section("```svg blocks render as an image, sanitized, with the source one click away")
+        r = render("```svg\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"20\" onload=\"alert(1)\">"
+                   "<rect width=\"40\" height=\"20\" fill=\"red\"/><script>alert(2)</script></svg>\n```")
+        page.wait_for_timeout(300)
+        img = page.evaluate("""() => { const i = [...document.querySelectorAll('img.svg-image')].pop();
+            return i && { src: decodeURIComponent(i.src), w: i.naturalWidth }; }""")
+        check("rendered as an <img>", img is not None, r["html"][:200])
+        check("…that actually draws", img and img["w"] == 40, img)
+        check("script and event handler sanitized away",
+              img and "<script" not in img["src"] and "onload" not in img["src"], img)
+        check("source kept, hidden", page.evaluate("""() => { const b = [...document.querySelectorAll('.diagram-block')].pop();
+            return !!b.querySelector('pre') && getComputedStyle(b.querySelector('pre')).display === 'none'; }"""))
+        shown = page.evaluate("""() => { const b = [...document.querySelectorAll('.diagram-block')].pop();
+            b.querySelector('.diagram-toggle').click();
+            return { pre: getComputedStyle(b.querySelector('pre')).display, img: getComputedStyle(b.querySelector('.svg-diagram')).display }; }""")
+        check("the toggle swaps image and source", shown == {"pre": "block", "img": "none"}, shown)
+        r = render("```svg\nnot an svg at all\n```")
+        check("non-SVG content stays a code block", "<pre" in r["html"] and "svg-image" not in r["html"], r["html"][:160])
+        r = render("```mermaid\ngraph TD; A-->B\n```")
+        page.wait_for_timeout(1500)
+        check("a mermaid diagram gets the same source toggle",
+              page.evaluate("!![...document.querySelectorAll('.diagram-block')].pop().querySelector('.mermaid-diagram')"))
+
         section("New Chat asks before discarding, and clears the composer")
         page.fill("#userInput", "draft")
         page.evaluate("messages.push({role:'user', content:'hi', uid:999})")
