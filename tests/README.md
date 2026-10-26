@@ -40,7 +40,10 @@ network error, blocked mixed content) must get its own hint, and none may fall b
 old "is your local server running?" line where it doesn't apply. Section 15 covers
 `endpointFetch`: only an https page calling a non-loopback `http://` endpoint gets
 `targetAddressSpace: "local"` (Chrome's local network permission), on a copy of the
-request's options.
+request's options. Sections 16–19 cover `stripReasoning` (earlier reasoning left out of a
+request, but never down to an empty assistant turn), `buildSamplingParams` (only set values
+are sent, a deliberate `top_k: 0` included), `readContextSize` (llama.cpp `/props`, vLLM
+`max_model_len`) and `contextGauge` (labels and the 75%/90% warning levels).
 
 ## Export/Import round-trip — `export-import.test.mjs`
 
@@ -86,7 +89,20 @@ payload (asserted on the stubbed `fetch`'s actual body).
 `fetch` is stubbed with a one-chunk SSE stream, so no API server is needed. Reuses the
 `benchmark/` virtualenv rather than adding another one.
 
-**Run `python3 build.py` first** — both end-to-end tests read `dist/`, not `src/`.
+## End-to-end — `e2e_chat_features.py`
+
+```bash
+benchmark/.venv/bin/python tests/e2e_chat_features.py
+```
+
+The features taken from llama.cpp's web UI: `top_k`/`min_p`/`repeat_penalty` reaching the
+payload only while set, earlier reasoning left out of requests when asked (history keeps
+it), the 🧮 context gauge (window from a stubbed `/props`), and versions: regenerate and
+edit keep what they replace behind ‹ n/m ›, an edit changes nothing until it is sent, an
+older reply can be regenerated, and a regenerate stopped before its first token brings the
+previous reply back. `fetch` is stubbed: each request answers "Reply N" with usage numbers.
+
+**Run `python3 build.py` first** — the end-to-end tests read `dist/`, not `src/`.
 
 ## Notes on the format
 

@@ -707,6 +707,25 @@
             color: var(--primary);
         }
 
+        /* Context gauge: a thin bar that turns amber at 75% and red at 90%. */
+        .ctx-bar {
+            width: 36px;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .ctx-bar-fill {
+            display: block;
+            height: 100%;
+            width: 0;
+            background: var(--primary);
+            transition: width 0.4s ease, background 0.4s ease;
+        }
+        .ctx-gauge[data-level="high"] .ctx-bar-fill { background: #f59e0b; }
+        .ctx-gauge[data-level="full"] .ctx-bar-fill { background: #ef4444; }
+        .ctx-gauge[data-level="full"] .stat-value { color: #ef4444; }
+
         /* Settings Modal */
         .modal-overlay {
             display: none;
@@ -929,6 +948,52 @@
             justify-content: flex-end;
         }
         .msg-wrapper:hover .msg-actions { opacity: 1; }
+        /* Version switcher: always visible (a hidden one is never found), while the
+           other actions keep appearing on hover. */
+        .msg-actions:has(.branch-nav) { opacity: 1; }
+        .msg-actions:has(.branch-nav) > .action-btn { opacity: 0; transition: opacity 0.2s; }
+        .msg-wrapper:hover .msg-actions > .action-btn,
+        .msg-actions > .action-btn:focus-visible { opacity: 1; }
+        .branch-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            margin-right: auto;
+            font-size: 0.8rem;
+            color: #6b7280;
+            font-variant-numeric: tabular-nums;
+        }
+        .branch-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: inherit;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .branch-btn:hover:not(:disabled) { background: #f3f4f6; color: var(--primary); }
+        .branch-btn:disabled { opacity: 0.35; cursor: default; }
+        /* The message the composer is editing. */
+        .msg-wrapper.editing .msg-content {
+            outline: 2px dashed var(--primary);
+            outline-offset: 2px;
+        }
+        .edit-notice {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 12px;
+            margin-bottom: 6px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            animation: fadeIn 0.2s ease;
+        }
         .action-btn {
             background: transparent;
             border: none;
@@ -1230,6 +1295,13 @@
             background: rgba(30, 41, 59, 0.7);
             border-color: var(--border-strong);
             color: var(--text-soft);
+        }
+        :root[data-theme="dark"] .ctx-bar { background: rgba(255,255,255,0.12); }
+        :root[data-theme="dark"] .branch-nav { color: var(--text-soft); }
+        :root[data-theme="dark"] .branch-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); }
+        :root[data-theme="dark"] .edit-notice {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.35);
         }
         :root[data-theme="dark"] .modal {
             background: var(--surface);

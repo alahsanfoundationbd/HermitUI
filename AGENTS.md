@@ -32,7 +32,9 @@ HermitUI is a private chat UI for OpenAI-compatible endpoints that ships as one 
 - Rendering: `updateMessageUI`, `appendMessage`, `injectCopyButtons` (Marked, then DOMPurify; Highlight.js; copy buttons; edit and regenerate).
 - Math: marked extensions plus `renderMathTex`, KaTeX in MathML-only mode inside the normal `marked.parse` → `DOMPurify.sanitize` path.
 - Mermaid: `loadMermaid`/`renderMermaidBlocks`, final renders only, `securityLevel: "strict"` with HTML labels off. The output must stay pure SVG or DOMPurify guts it; invalid diagrams fall back to code blocks.
-- Settings: modal handlers, `testConnectionBtn`, `updateGlobalStats`.
+- Settings: modal handlers, `testConnectionBtn`, `updateGlobalStats`. Sampling params go through `buildSamplingParams` (unset = not sent; llama.cpp's `top_k`/`min_p`/`repeat_penalty` too). `stripReasoning` drops earlier reasoning from the request copy only (`DROP_REASONING`); history keeps it.
+- Context gauge: `lookupContextSize` (llama.cpp `/props`, vLLM `max_model_len`, once per endpoint and model, after the first reply), `wllamaContextSize` from the loaded GGUF, `contextGauge`/`updateContextGauge`.
+- Versions: `forks` keyed by the uid of the message before the fork (0 = chat start), each holding detached `{msgs, nodes}` per version; `forkAt`, `switchVersion`, `refreshBranchNav` (also restores the previous version when a regenerate stopped before its first token). Edit only marks the message (`startEdit`); the fork happens on send.
 - Errors: `chatErrorHint` (pure, unit-tested) picks one line of advice per failure class; add new classes there, never at a call site. An empty hint means the error says enough. `chatErrorHtml` renders it; Test Connection reuses it in `showToast(msg, { error: true })`.
 - Attachments: `processFiles`, `renderChips`, `isTextFile`. Export/import: `exportBtn`/`importBtn`, a Markdown round-trip (format notes in `tests/README.md`).
 - The wllama build's Firefox WebGPU notice is UA-sniffed on purpose (a Firefox bug, [1870699](https://bugzilla.mozilla.org/show_bug.cgi?id=1870699)); remove it once the fix ships.

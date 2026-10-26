@@ -317,17 +317,17 @@ The computer's firewall has to let the port through. Anyone on that network can 
 *   **🔒 Privacy first & ephemeral:** no `localStorage`, `IndexedDB`, or cookies — nothing survives the tab.
 *   **🧠 Thinking-model support:** built-in parser formats `<think>`, `<thought>`, and `<reasoning>` tags as they stream from reasoning models.
 *   **🎚️ Flexible thinking control:** a **🧠 Think** selector beside the persona picker sets reasoning depth — **Off / Low / Medium / High** — for models that support it. Off genuinely stops the reasoning trace rather than shortening it, which is the difference between a 25 s and a 58 s answer on a 27B. It only appears where it can actually do something: for a local GGUF the model's own chat template is scanned for the reasoning variables, and for a remote endpoint **Settings → Check Reasoning Support** reads llama.cpp's `/props` capability flags (or Ollama's template). Levels are validated against the set the template accepts, so a value it would reject is never sent.
-*   **⚡ Real-time streaming** with **📊 live performance stats** — prompt tokens, completion tokens, tokens/second, and total duration.
+*   **⚡ Real-time streaming** with **📊 live performance stats** — prompt tokens, completion tokens, tokens/second, total duration, and a **🧮 context gauge** showing how full the model's context window is (llama.cpp, vLLM and the in-browser model report its size).
 *   **🖼️ Image & vision support:** upload, drag-and-drop, or paste (Ctrl+V) images for vision-capable models, sent as `image_url` content per the OpenAI schema with automatic vision-model detection.
 *   **📝 Rich rendering:** Markdown with per-block copy buttons, syntax highlighting, **🧮 LaTeX math** (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`) rendered via KaTeX to native MathML — no webfonts, works mid-stream and offline — and **📈 Mermaid diagrams** from ```` ```mermaid ```` fences.
 *   **🎭 Personas:** switch between preset system prompts (technical, general, writing, tutor) on the fly.
-*   **✏️ Edit & regenerate** any previous message without restarting the conversation.
+*   **✏️ Edit & regenerate** any previous message or reply without losing what it replaces: every version stays one click away (‹ 1/2 ›), in memory only.
 
 <details>
 <summary><b>More features</b></summary>
 
 *   **📎 Context attachments:** drag-and-drop or upload text files to inject their contents into your prompt.
-*   **🎛️ Advanced sampling controls:** `temperature`, `max_tokens`, `top_p`, `presence_penalty`, `frequency_penalty`, and `seed` from a collapsible Settings panel. Params are only sent when set, keeping payloads compatible with minimal backends.
+*   **🎛️ Advanced sampling controls:** `temperature`, `max_tokens`, `top_p`, `presence_penalty`, `frequency_penalty`, `seed`, and llama.cpp's `top_k`, `min_p` and `repeat_penalty` from a collapsible Settings panel. Params are only sent when set, keeping payloads compatible with minimal backends. A Settings switch can also leave the model's earlier reasoning out of requests to save context.
 *   **🎨 Modern UI/UX:** clean, responsive design with smooth micro-animations, comprehensive CSS variables for theming, and a glassmorphism feel. Light and dark themes.
 *   **💾 Chat export & import:** download the entire conversation as a formatted Markdown file (📤, `Ctrl+E`), and load one back in later with 📂 (`Ctrl+I`) — messages, system prompt and attached context are restored, and the model picks the conversation up where you left it. The exported file is the only copy: nothing is stored in the browser. Images can't come back, since the export records them as `[N images attached]`.
 *   **⚙️ Customizable settings:** API URL, model name, API key, and system prompt via the on-page settings overlay.

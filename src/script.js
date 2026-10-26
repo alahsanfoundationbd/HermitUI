@@ -386,6 +386,10 @@ Rules:
         let MODEL_NAME = "local-model";
         let TEMPERATURE = 0.7;
         let MAX_TOKENS = null, TOP_P = 1, PRESENCE_PENALTY = 0, FREQUENCY_PENALTY = 0, SEED = null;
+        // llama.cpp samplers outside OpenAI's schema: null means "not set", and an unset
+        // one is never sent, so strict endpoints only see them when the user asks.
+        let TOP_K = null, MIN_P = null, REPEAT_PENALTY = null;
+        let DROP_REASONING = false;
         let SYSTEM_PROMPT = PERSONAS.technical.prompt;
 
         // ========== DOM References ==========
@@ -544,6 +548,11 @@ Rules:
             if (status === 401 || status === 403) return "The server rejected the request's credentials — check the API key in Settings.";
             if (status === 404) return "Nothing answered at that address — check the API Base URL and the model name in Settings.";
             if (status === 429) return "Rate-limited or out of quota — wait a moment, or check your provider account.";
+            // OpenAI-strict servers name the argument they refuse ("Unrecognized request
+            // argument supplied: top_k").
+            if (status === 400 && /\b(?:top_k|min_p|repeat_penalty)\b/.test(msg)) {
+                return "This server doesn't take llama.cpp's samplers — clear Top K, Min P and Repeat Penalty in Settings.";
+            }
             if (status >= 500) return "The server failed while handling the request — its own logs will say why.";
             // response.json() on an HTML page: Chrome "Unexpected token '<'…is not valid JSON",
             // Firefox "JSON.parse: unexpected character" — never a server's own error text. (Safari's "The string did not match
@@ -1114,6 +1123,61 @@ Rules:
             document.getElementById("stat-completion-est").style.display = completionEst ? "inline" : "none";
         }
 
+        // ========== Context Gauge ==========
+        // How much of the model's context window the last chat request filled. The window
+        // comes from the server (looked up once per endpoint and model, after the first
+        // reply, so no request goes out before the user chats) or from the loaded GGUF.
+        let apiContextSize = null;
+        let apiContextKey = null;     // the "url|model" apiContextSize describes
+        let wllamaContextSize = null; // set when an in-browser model loads
+        let lastContextUse = null;    // { used, est } from the last finished chat request
+
+        function activeContextSize() {
+            if (activeBackend() === "wllama") return wllamaContextSize;
+            return apiContextKey === `${API_URL}|${MODEL_NAME}` ? apiContextSize : null;
+        }
+
+        function updateContextGauge() {
+            const el = document.getElementById("ctxGauge");
+            const n = activeContextSize();
+            if (!n) { el.style.display = "none"; return; }
+            const use = lastContextUse || { used: 0, est: false };
+            const g = contextGauge(use.used, n);
+            el.style.display = "";
+            el.dataset.level = g.level;
+            document.getElementById("ctxGaugeFill").style.width = g.pct + "%";
+            document.getElementById("ctxGaugeText").textContent = (use.est ? "~" : "") + g.text;
+            el.title = `The last request filled ${g.pct}% of the model's ${n}-token context window (prompt + reply${use.est ? ", estimated" : ""}). The next one adds to it.`;
+        }
+
+        async function lookupContextSize() {
+            if (activeBackend() !== "api") return;
+            const key = `${API_URL}|${MODEL_NAME}`;
+            if (apiContextKey === key) return;
+            apiContextKey = key;
+            apiContextSize = null;
+            const headers = { "Authorization": "Bearer " + API_KEY };
+            let n = null;
+            try {
+                const res = await endpointFetch(apiRoot(API_URL) + "/props", { headers });
+                if (res.ok) n = readContextSize(await res.json());
+            } catch (e) { /* not llama.cpp */ }
+            if (!n) {
+                try {
+                    const res = await endpointFetch(apiEndpoint(API_URL, "/models"), { headers });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const list = Array.isArray(data.data) ? data.data : [];
+                        n = readContextSize(list.find(m => extractModelId(m) === MODEL_NAME));
+                    }
+                } catch (e) { /* no models list either */ }
+            }
+            // Settings may have changed while the requests were out.
+            if (apiContextKey !== key) return;
+            apiContextSize = n;
+            updateContextGauge();
+        }
+
         // ========== Modal Open/Close (focus-managed) ==========
         // Basic dialog behavior for keyboard/screen-reader users: focus moves into
         // the dialog on open and back to the opener on close; Tab cycles inside
@@ -1201,6 +1265,10 @@ Rules:
             document.getElementById("settingPresencePenalty").value = PRESENCE_PENALTY;
             document.getElementById("settingFrequencyPenalty").value = FREQUENCY_PENALTY;
             document.getElementById("settingSeed").value = SEED == null ? "" : SEED;
+            document.getElementById("settingTopK").value = TOP_K == null ? "" : TOP_K;
+            document.getElementById("settingMinP").value = MIN_P == null ? "" : MIN_P;
+            document.getElementById("settingRepeatPenalty").value = REPEAT_PENALTY == null ? "" : REPEAT_PENALTY;
+            document.getElementById("settingDropReasoning").checked = DROP_REASONING;
             document.getElementById("settingSystem").value = SYSTEM_PROMPT;
             updateVisionBadge();
             // @wllama:start
@@ -1269,10 +1337,20 @@ Rules:
             FREQUENCY_PENALTY = isNaN(freqVal) ? 0 : clamp(freqVal, -2, 2);
             const seedVal = parseInt(document.getElementById("settingSeed").value, 10);
             SEED = isNaN(seedVal) ? null : seedVal;
+            // Blank stays null (not sent), unlike top_p above: these have no neutral value
+            // every server agrees on, so "unset" must mean the server's own default.
+            const topKVal = parseInt(document.getElementById("settingTopK").value, 10);
+            TOP_K = isNaN(topKVal) ? null : Math.max(0, topKVal);
+            const minPVal = parseFloat(document.getElementById("settingMinP").value);
+            MIN_P = isNaN(minPVal) ? null : clamp(minPVal, 0, 1);
+            const repVal = parseFloat(document.getElementById("settingRepeatPenalty").value);
+            REPEAT_PENALTY = isNaN(repVal) ? null : clamp(repVal, 0, 2);
+            DROP_REASONING = document.getElementById("settingDropReasoning").checked;
 
             applySystemPrompt(document.getElementById("settingSystem").value.trim());
 
             updateThinkingControl();
+            updateContextGauge();
             updateOverlay();
             updateMainCloudWarning();
             closeModalEl(settingsModal);
@@ -1522,6 +1600,8 @@ Rules:
                     ? "embedded template"
                     : `auto: ${wllamaDetectedTemplate}`;
                 const ctxNote = attemptCtx !== requestedCtx ? `, context reduced to ${attemptCtx}` : "";
+                wllamaContextSize = wllamaInstance.getLoadedContextInfo().n_ctx || attemptCtx || null;
+                lastContextUse = null;
                 statusEl.textContent = `Status: Ready 🟢 (${detail}${ctxNote})`;
                 pbContainer.style.display = "none";
                 // A loaded model means in-browser mode: commit it and refresh the
@@ -1531,6 +1611,7 @@ Rules:
                 updateOverlay();
                 updateMainCloudWarning();
                 updateThinkingControl();
+                updateContextGauge();
                 if (wllamaHashLoadPending) {
                     // Banner-initiated load: drop the user straight into the chat.
                     wllamaHashLoadPending = false;
@@ -1561,8 +1642,10 @@ Rules:
                 if (!wllamaInstance) {
                     wllamaModelLabel = null;
                     wllamaReasoning = { supported: false, maxLevel: "high", levels: ["low", "medium", "high"] };
+                    wllamaContextSize = null;
                     updateOverlay();
                     updateThinkingControl();
+                    updateContextGauge();
                 }
             } finally {
                 window.Worker = OriginalWorker;
@@ -1890,9 +1973,13 @@ Rules:
         function startNewChat() {
             // New chat inherits current active persona
             messages = [{"role": "system", "content": SYSTEM_PROMPT}];
+            forks.clear();
+            cancelEdit();
             resetComposer();
             showEmptyState();
             updateGlobalStats("0", "0", "0.0", "0.0");
+            lastContextUse = null;
+            updateContextGauge();
             userScrolledUp = false;
             jumpBottomBtn.classList.remove("active");
         }
@@ -2315,6 +2402,8 @@ Rules:
         function renderImportedChat(parsed) {
             chatbox.innerHTML = "";
             messages = [{"role": "system", "content": SYSTEM_PROMPT}];
+            forks.clear();
+            cancelEdit();
             // `null` means the file had no System block at all (keep the current prompt);
             // "" means it was exported with the prompt deliberately cleared — restore that.
             if (parsed.system !== null) applySystemPrompt(parsed.system);
@@ -2370,6 +2459,8 @@ Rules:
             // The imported turns weren't generated here — the counters describe this
             // session's traffic, so they start over.
             updateGlobalStats("0", "0", "0.0", "0.0");
+            lastContextUse = null;
+            updateContextGauge();
         }
 
         function finishImport(parsed) {
@@ -2439,7 +2530,7 @@ Rules:
             for (const msg of messages) {
                 if (msg.isSummary) continue;
                 if (msg.role === "user") transcript += `User: ${contentToText(msg.content)}\n\n`;
-                else if (msg.role === "assistant") transcript += `AI: ${contentToText(msg.content)}\n\n`;
+                else if (msg.role === "assistant") transcript += `AI: ${contentToText(DROP_REASONING ? stripReasoning(msg.content) : msg.content)}\n\n`;
             }
 
             const summaryPrompt = `Summarize the following conversation:\n\n${transcript}`;
@@ -2770,6 +2861,51 @@ Rules:
             return finalContent;
         }
 
+        // An assistant turn as the model gets it back with "Leave earlier reasoning out of
+        // requests" on. History keeps the full text (the bubbles and the export need it);
+        // only the request copy is stripped. A turn that was nothing but reasoning (stopped
+        // mid-thought) keeps it: an empty assistant turn breaks some backends and templates.
+        function stripReasoning(content) {
+            if (typeof content !== "string") return content;
+            const answer = parseThinkSegments(content, true)
+                .filter(s => s.type === "text").map(s => s.content).join("").trim();
+            return answer || content;
+        }
+
+        // Request params from the sampling settings. Only what is set, or off its neutral
+        // value, is sent, so a minimal backend never sees a parameter it might reject.
+        // top_k/min_p/repeat_penalty are llama.cpp's names; LM Studio and vLLM take the same.
+        function buildSamplingParams(s) {
+            const o = s || {};
+            const p = {};
+            if (o.maxTokens != null) p.max_tokens = o.maxTokens;
+            if (o.topP != null && o.topP !== 1) p.top_p = o.topP;
+            if (o.presencePenalty) p.presence_penalty = o.presencePenalty;
+            if (o.frequencyPenalty) p.frequency_penalty = o.frequencyPenalty;
+            if (o.seed != null) p.seed = o.seed;
+            if (o.topK != null) p.top_k = o.topK;
+            if (o.minP != null) p.min_p = o.minP;
+            if (o.repeatPenalty != null) p.repeat_penalty = o.repeatPenalty;
+            return p;
+        }
+
+        // The context window a server runs with: llama.cpp's /props carries it per slot
+        // (default_generation_settings.n_ctx, which is what one chat gets), vLLM's
+        // /v1/models entries as max_model_len. null when the answer doesn't say.
+        function readContextSize(info) {
+            const o = info || {};
+            const n = (o.default_generation_settings && o.default_generation_settings.n_ctx) ?? o.n_ctx ?? o.max_model_len;
+            return Number.isFinite(n) && n > 0 ? n : null;
+        }
+
+        // What the 🧮 gauge shows: tokens in the last request (prompt + reply) against the
+        // context window. It warns from 75%, since the next turn adds to the count.
+        function contextGauge(used, nCtx) {
+            const k = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n);
+            const pct = nCtx > 0 ? Math.min(100, Math.round(used / nCtx * 100)) : 0;
+            return { text: `${k(used)} / ${k(nCtx)}`, pct, level: pct >= 90 ? "full" : pct >= 75 ? "high" : "ok" };
+        }
+
         // @wllama:start
         // ========== In-Browser Inference (wllama) ==========
         const WLLAMA_CDN_BASE = "https://cdn.jsdelivr.net/npm/@wllama/wllama@3.6.1/esm";
@@ -3028,6 +3164,7 @@ Rules:
                 }
                 const tps = completionTokens > 0 ? (completionTokens / durationSec).toFixed(1) : "0.0";
                 updateGlobalStats(promptTokens, completionTokens, tps, durationSec.toFixed(1), promptEst, completionEst);
+                ctx.usage = { used: promptTokens + completionTokens, est: promptEst || completionEst };
                 if (!userScrolledUp) {
                     chatbox.scrollTop = chatbox.scrollHeight;
                 }
@@ -3111,11 +3248,14 @@ Rules:
                     // ?? not ||: temperature 0 (greedy decoding) is a deliberate setting and
                     // must not fall through to the 0.7 default.
                     const temperature = payload.temperature ?? 0.7;
-                    // Optional sampling params (Advanced parameters) are forwarded when the
-                    // payload carries them; penalties are not supported by the wllama API.
+                    // Optional sampling params are forwarded when the payload carries them.
+                    // wllama 3.x hands its options as JSON to llama.cpp's own completion
+                    // handler, so llama.cpp's names (top_k, min_p, repeat_penalty) and the
+                    // OpenAI penalties all work. max_tokens has its own setting below.
                     const sampling = {};
-                    if (payload.top_p !== undefined) sampling.top_p = payload.top_p;
-                    if (payload.seed !== undefined) sampling.seed = payload.seed;
+                    for (const k of ["top_p", "seed", "top_k", "min_p", "repeat_penalty", "presence_penalty", "frequency_penalty"]) {
+                        if (payload[k] !== undefined) sampling[k] = payload[k];
+                    }
 
                     // Resolve which format to use. "auto" prefers the model's own embedded
                     // chat template (via createChatCompletion) and only falls back to a
@@ -3347,6 +3487,133 @@ Rules:
         // uids are stripped from API payloads before sending.
         let nextMsgUid = 1;
 
+        // ========== Versions (edit and regenerate keep what they replace) ==========
+        // Sending an edited message or regenerating a reply forks the chat instead of
+        // discarding what followed. A fork is keyed by the uid of the message right before
+        // it (0 = the start of the chat) and holds every version of the tail after it: the
+        // history entries plus their detached bubbles, so switching back restores the exact
+        // rendering. The shown version's slot is null; it lives in `messages` and the
+        // chatbox. Memory only, like the rest of the chat.
+        const forks = new Map();
+        let editingUid = null; // user message the composer is editing; it forks on send
+
+        function wrapperFor(uid) {
+            return chatbox.querySelector(`.msg-wrapper[data-uid="${uid}"]`);
+        }
+
+        // Detach everything after the parent: its history entries and its bubbles (error
+        // bubbles included, which have no history entry).
+        function takeTail(parentUid) {
+            const idx = parentUid ? messages.findIndex(m => m.uid === parentUid) + 1 : 1;
+            const msgs = messages.splice(idx);
+            const nodes = [];
+            let el = parentUid ? wrapperFor(parentUid).nextElementSibling : chatbox.firstElementChild;
+            while (el) {
+                const next = el.nextElementSibling;
+                nodes.push(el);
+                el.remove();
+                el = next;
+            }
+            return { msgs, nodes };
+        }
+
+        // Put away the message at `idx` and everything after it as one version, leaving an
+        // empty slot that the next message (the edited one, or the new reply) fills.
+        function forkAt(idx) {
+            const parentUid = idx > 1 ? messages[idx - 1].uid : 0;
+            let fork = forks.get(parentUid);
+            if (!fork) {
+                fork = { versions: [null], active: 0 };
+                forks.set(parentUid, fork);
+            }
+            fork.versions[fork.active] = takeTail(parentUid);
+            fork.versions.push(null);
+            fork.active = fork.versions.length - 1;
+            if (editingUid && !messages.some(m => m.uid === editingUid)) cancelEdit();
+        }
+
+        function switchVersion(parentUid, target) {
+            const fork = forks.get(parentUid);
+            if (isWaiting || !fork || target < 0 || target >= fork.versions.length || target === fork.active) return;
+            fork.versions[fork.active] = takeTail(parentUid);
+            const { msgs, nodes } = fork.versions[target];
+            messages.push(...msgs);
+            nodes.forEach(n => chatbox.appendChild(n));
+            fork.versions[target] = null;
+            fork.active = target;
+            if (editingUid && !messages.some(m => m.uid === editingUid)) cancelEdit();
+            refreshBranchNav();
+        }
+
+        // Draw ‹ n/m › on the first bubble of every fork that is on screen. A fork whose
+        // shown version is empty (a regenerate stopped before its first token) falls back
+        // to the version before it.
+        function refreshBranchNav() {
+            chatbox.querySelectorAll(".branch-nav").forEach(n => n.remove());
+            for (const [parentUid, fork] of forks) {
+                const parent = parentUid ? wrapperFor(parentUid) : null;
+                if (parentUid && !parent) continue; // inside a version that isn't shown
+                const first = parent ? parent.nextElementSibling : chatbox.firstElementChild;
+                if (!first) {
+                    fork.versions.splice(fork.active, 1);
+                    fork.active = Math.max(0, fork.active - 1);
+                    const { msgs, nodes } = fork.versions[fork.active];
+                    messages.push(...msgs);
+                    nodes.forEach(n => chatbox.appendChild(n));
+                    fork.versions[fork.active] = null;
+                    // Restored nodes may hold forks of their own: start over.
+                    if (fork.versions.length === 1) forks.delete(parentUid);
+                    return refreshBranchNav();
+                }
+                const actions = first.querySelector(".msg-actions");
+                if (!actions) continue;
+                const nav = document.createElement("span");
+                nav.className = "branch-nav";
+                const btn = (label, aria, target) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.className = "branch-btn";
+                    b.textContent = label;
+                    b.setAttribute("aria-label", aria);
+                    b.disabled = target < 0 || target >= fork.versions.length;
+                    b.addEventListener("click", () => switchVersion(parentUid, target));
+                    return b;
+                };
+                const count = document.createElement("span");
+                count.textContent = `${fork.active + 1}/${fork.versions.length}`;
+                nav.append(btn("‹", "Previous version", fork.active - 1), count, btn("›", "Next version", fork.active + 1));
+                actions.prepend(nav);
+            }
+        }
+
+        const editNotice = document.getElementById("editNotice");
+        function startEdit(uid) {
+            cancelEdit();
+            editingUid = uid;
+            const w = wrapperFor(uid);
+            if (w) w.classList.add("editing");
+            editNotice.style.display = "flex";
+        }
+        function cancelEdit() {
+            if (editingUid) {
+                const w = wrapperFor(editingUid);
+                if (w) w.classList.remove("editing");
+            }
+            editingUid = null;
+            editNotice.style.display = "none";
+        }
+        document.getElementById("editCancelBtn").addEventListener("click", () => {
+            cancelEdit();
+            resetComposer();
+            inputField.focus();
+        });
+        inputField.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && editingUid) {
+                cancelEdit();
+                resetComposer();
+            }
+        });
+
         // ========== Main Submit Handler ==========
         chatForm.addEventListener("submit", async function(e) {
             e.preventDefault();
@@ -3372,6 +3639,14 @@ Rules:
 
                 const emptyState = document.getElementById("emptyState");
                 if (emptyState) emptyState.remove();
+
+                // Sending an edit: the original message and everything after it become
+                // the previous version, and this message starts the new one.
+                if (editingUid) {
+                    const idx = messages.findIndex(m => m.uid === editingUid);
+                    cancelEdit();
+                    if (idx > 0) forkAt(idx);
+                }
 
                 const textFiles = hasFiles ? attachedFiles.filter(f => f.kind !== "image") : [];
                 const imageFiles = hasFiles ? attachedFiles.filter(f => f.kind === "image") : [];
@@ -3464,24 +3739,26 @@ Rules:
             responseContainer.innerHTML = `<div class="ai-response-body"></div>`;
 
             // Strip internal bookkeeping (uid/isSummary) — servers only see role/content.
-            const apiMessages = messages.filter(m => !m.isSummary).map(({ role, content }) => ({ role, content }));
+            const apiMessages = messages.filter(m => !m.isSummary).map(({ role, content }) => ({
+                role, content: DROP_REASONING && role === "assistant" ? stripReasoning(content) : content
+            }));
             const chatPayload = {
                 model: MODEL_NAME,
                 // wllama flattens images away, so it must not be told it can see them.
                 messages: activeBackend() === "wllama" ? apiMessages : withImageNote(apiMessages),
                 temperature: TEMPERATURE,
                 stream: true,
-                stream_options: { include_usage: true }
+                stream_options: { include_usage: true },
+                ...buildSamplingParams({
+                    maxTokens: MAX_TOKENS, topP: TOP_P, presencePenalty: PRESENCE_PENALTY,
+                    frequencyPenalty: FREQUENCY_PENALTY, seed: SEED,
+                    topK: TOP_K, minP: MIN_P, repeatPenalty: REPEAT_PENALTY,
+                }),
+                ...currentReasoningParams()
             };
-            // Only send advanced params when set / non-default, for maximal backend compatibility.
-            if (MAX_TOKENS != null) chatPayload.max_tokens = MAX_TOKENS;
-            if (TOP_P !== 1) chatPayload.top_p = TOP_P;
-            if (PRESENCE_PENALTY !== 0) chatPayload.presence_penalty = PRESENCE_PENALTY;
-            if (FREQUENCY_PENALTY !== 0) chatPayload.frequency_penalty = FREQUENCY_PENALTY;
-            if (SEED != null) chatPayload.seed = SEED;
-            Object.assign(chatPayload, currentReasoningParams());
+            refreshBranchNav();
 
-            await runStreamingResponse({
+            const streamCtx = await runStreamingResponse({
                 payload: chatPayload,
                 outerEl: responseContainer,
                 bodyEl: responseContainer.querySelector('.ai-response-body'),
@@ -3506,9 +3783,18 @@ Rules:
                     messages.push({"role": "assistant", "content": buildFinalHistory(ctx.fullRawText, ctx.aiReasoning), uid});
                 },
                 onFailure: (error, ctx) => {
+                    ctx.failed = true;
                     ctx.responseContainer.insertAdjacentHTML('beforeend', chatErrorHtml(error));
                 }
             });
+            // A regenerate stopped before its first token leaves its fork empty; this
+            // brings the previous version back.
+            refreshBranchNav();
+            if (!streamCtx.failed && streamCtx.usage) {
+                lastContextUse = streamCtx.usage;
+                updateContextGauge();
+                lookupContextSize();
+            }
         });
 
         // ========== Append Message ==========
@@ -3517,7 +3803,8 @@ Rules:
         function appendMessage(sender, text, cssClass, emoji, isRawHtml = false, rawData = text, msgUid = null) {
             const wrapper = document.createElement("div");
             wrapper.className = `msg-wrapper ${cssClass}`;
-            
+            if (msgUid != null) wrapper.dataset.uid = msgUid;
+
             const contentId = "content-" + Math.random().toString(36).substring(2, 10);
            
             const avatarDiv = document.createElement("div");
@@ -3588,26 +3875,10 @@ Rules:
                     
                     inputField.focus();
                     inputField.dispatchEvent(new Event('input'));
-                    
-                    // Truncate history at this message. uid-based: DOM node counts
-                    // desync from `messages` around error bubbles and summaries.
-                    // Resolve the index *before* touching the DOM — removing the
-                    // bubbles while leaving `messages` intact would desync state.
-                    const idx = messages.findIndex(m => m.uid === msgUid);
-                    if (idx <= 0) {
-                        console.warn("Edit: message uid not found in history; leaving conversation unchanged.");
-                        return;
-                    }
 
-                    let sibling = wrapper.nextElementSibling;
-                    while (sibling) {
-                        let next = sibling.nextElementSibling;
-                        sibling.remove();
-                        sibling = next;
-                    }
-                    wrapper.remove();
-
-                    messages = messages.slice(0, idx);
+                    // Nothing is removed yet: the chat stays as it is until the edit is
+                    // sent, which then keeps the original as the previous version.
+                    startEdit(msgUid);
                 });
                 actionsDiv.appendChild(editBtn);
             } else if (cssClass === "ai") {
@@ -3616,17 +3887,20 @@ Rules:
                 regenBtn.innerHTML = "🔄 Regenerate";
                 regenBtn.addEventListener("click", () => {
                     if (isWaiting) return;
-                    const aiWrappers = document.querySelectorAll(".msg-wrapper.ai");
-                    if (aiWrappers.length > 0 && aiWrappers[aiWrappers.length - 1] === wrapper) {
+                    const idx = messages.findIndex(m => m.uid === msgUid);
+                    if (idx > 0) {
+                        // Any reply can be regenerated: it and everything after it become
+                        // the previous version.
+                        forkAt(idx);
+                    } else if (chatbox.lastElementChild === wrapper) {
+                        // A failed reply has no history entry to fork on; retrying the
+                        // latest one just replaces it.
                         wrapper.remove();
-                        // Remove exactly this response's history entry — error bubbles
-                        // have none, and a later summary must never be popped instead.
-                        const idx = messages.findIndex(m => m.uid === msgUid);
-                        if (idx !== -1) messages.splice(idx, 1);
-                        chatForm.dispatchEvent(new CustomEvent("submit", { cancelable: true, detail: { regenerate: true } }));
                     } else {
-                        showToast("⚠️ Can only regenerate the latest response.");
+                        showToast("⚠️ A failed reply can only be retried while it is the latest message.");
+                        return;
                     }
+                    chatForm.dispatchEvent(new CustomEvent("submit", { cancelable: true, detail: { regenerate: true } }));
                 });
                 actionsDiv.appendChild(regenBtn);
             }

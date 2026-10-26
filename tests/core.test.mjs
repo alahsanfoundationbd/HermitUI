@@ -15,6 +15,7 @@ const {
     IMAGE_NOTE, withImageNote,
     buildWllamaPrompt, apiRoot, parseReasoningTemplateSupport, buildReasoningParams,
     chatErrorHint, isBlockedMixedContent, endpointFetch,
+    stripReasoning, buildSamplingParams, readContextSize, contextGauge,
 } = H;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -459,6 +460,10 @@ section("14. chat error hints");
     check("other local failures point at the debug console",
         /debug console/.test(local("something odd")), local("something odd"));
 
+    check("a strict server refusing a llama.cpp sampler says which settings to clear",
+        /Top K, Min P and Repeat Penalty/.test(api("Server Error 400: Unrecognized request argument supplied: top_k")));
+    check("…but an unrelated 400 doesn't blame them",
+        !/Top K/.test(api("Server Error 400: messages must not be empty")));
     check("401 points at the API key", /API key/.test(api("Server Error 401: Unauthorized")), api("Server Error 401: Unauthorized"));
     check("403 points at the API key", /API key/.test(api("Server Error 403: Forbidden")));
     check("404 points at URL and model name", /API Base URL/.test(api("Server Error 404: Not Found")));
@@ -517,6 +522,57 @@ section("15. local network requests from an https page");
         && (globalThis.location = { protocol: "https:" }, isBlockedMixedContent("http://192.168.1.20:8080")));
     globalThis.fetch = realFetch;
     delete globalThis.location;
+}
+
+section("16. reasoning left out of requests");
+{
+    check("a closed think block is dropped",
+        stripReasoning("<think>weighing it up</think>The answer.") === "The answer.");
+    check("every block goes, the answer text stays in order",
+        stripReasoning("<think>a</think>One. <thought>b</thought>Two.") === "One. Two.");
+    check("a reply that is only reasoning keeps it (no empty assistant turn)",
+        stripReasoning("<think>stopped mid-thought") === "<think>stopped mid-thought");
+    check("plain text passes through", stripReasoning("Just text.") === "Just text.");
+    const arr = [{ type: "text", text: "hi" }];
+    check("non-string content is left alone", stripReasoning(arr) === arr);
+}
+
+section("17. sampling params sent only when set");
+{
+    const none = buildSamplingParams({ maxTokens: null, topP: 1, presencePenalty: 0, frequencyPenalty: 0, seed: null,
+        topK: null, minP: null, repeatPenalty: null });
+    check("defaults send nothing", Object.keys(none).length === 0, JSON.stringify(none));
+    const all = buildSamplingParams({ maxTokens: 512, topP: 0.9, presencePenalty: 0.5, frequencyPenalty: -0.5, seed: 0,
+        topK: 40, minP: 0.05, repeatPenalty: 1.1 });
+    check("set values use the wire names", JSON.stringify(all) === JSON.stringify({
+        max_tokens: 512, top_p: 0.9, presence_penalty: 0.5, frequency_penalty: -0.5, seed: 0,
+        top_k: 40, min_p: 0.05, repeat_penalty: 1.1 }), JSON.stringify(all));
+    const zeros = buildSamplingParams({ topK: 0, minP: 0, repeatPenalty: 1 });
+    check("a deliberate 0 or 1 is still sent for llama.cpp's samplers (it overrides the server default)",
+        zeros.top_k === 0 && zeros.min_p === 0 && zeros.repeat_penalty === 1, JSON.stringify(zeros));
+    check("no options object", Object.keys(buildSamplingParams()).length === 0);
+}
+
+section("18. context window lookup");
+{
+    check("llama.cpp /props: the slot's n_ctx",
+        readContextSize({ default_generation_settings: { n_ctx: 49152 }, total_slots: 1 }) === 49152);
+    check("vLLM /v1/models entry: max_model_len", readContextSize({ id: "m", max_model_len: 32768 }) === 32768);
+    check("a plain models entry says nothing", readContextSize({ id: "gpt-4o", object: "model" }) === null);
+    check("garbage says nothing", readContextSize(undefined) === null && readContextSize({ n_ctx: "big" }) === null
+        && readContextSize({ n_ctx: 0 }) === null);
+}
+
+section("19. context gauge");
+{
+    const g = contextGauge(3200, 16384);
+    check("label in k", g.text === "3.2k / 16k", g.text);
+    check("percent rounded", g.pct === 20, g.pct);
+    check("ok below 75%", g.level === "ok");
+    check("high from 75%", contextGauge(12288, 16384).level === "high");
+    check("full from 90%, capped at 100", contextGauge(20000, 16384).level === "full" && contextGauge(20000, 16384).pct === 100);
+    check("small numbers stay exact", contextGauge(999, 49152).text === "999 / 49k", contextGauge(999, 49152).text);
+    check("1000 reads 1k, not 1.0k", contextGauge(1000, 4096).text === "1k / 4.1k", contextGauge(1000, 4096).text);
 }
 
 report();

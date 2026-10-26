@@ -67,6 +67,10 @@ ${fn("parseChatExport")}
 ${fn("splitContextBlocks")}
 ${fn("parseThinkSegments")}
 ${fn("buildFinalHistory")}
+${fn("stripReasoning")}
+${fn("buildSamplingParams")}
+${fn("readContextSize")}
+${fn("contextGauge")}
 ${fn("createThrottle")}
 ${fn("apiEndpoint")}
 ${fn("apiRoot")}
@@ -93,7 +97,8 @@ function exportMd(messages) { ${exportBody()} return md; }
 export {
     SUMMARY_PREFIX, escapeHtml, unescapeHtml, contentToText, IMAGE_NOTE, withImageNote, parseChatExport,
     splitContextBlocks, exportMd,
-    parseThinkSegments, buildFinalHistory, createThrottle, apiEndpoint, apiRoot, normalizeApiUrl, localIsoDate,
+    parseThinkSegments, buildFinalHistory, stripReasoning, buildSamplingParams, readContextSize, contextGauge,
+    createThrottle, apiEndpoint, apiRoot, normalizeApiUrl, localIsoDate,
     parseReasoningTemplateSupport, buildReasoningParams,
     detectCloudProvider, isLocalEndpoint, describeRemoteEndpoint, chatErrorHint,
     isBlockedMixedContent, endpointFetch,
