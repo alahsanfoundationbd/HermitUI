@@ -31,7 +31,7 @@
   </a>
 </div>
 
-> **Status: v0.3.24** (Phase 3.7, a plan you can see). One self-contained HTML file,
+> **Status: v0.3.25** (Phase 3.7, a plan you can see). One self-contained HTML file,
 > [`dist/hermit-agent-standalone.html`](dist/hermit-agent-standalone.html) (about 11 MB,
 > Python included). It is developed here, separately from the main app in
 > [`../src/`](../src/), so it can move fast without destabilising HermitUI.
@@ -56,7 +56,8 @@ It works with any OpenAI-compatible server: llama.cpp, Ollama, LM Studio, vLLM, 
 **A server on another device** (the agent on a phone, the model on a computer at home):
 the server has to listen on the network (llama.cpp `--host 0.0.0.0`), and the hosted page
 is https while a LAN server is usually plain http, which browsers block as mixed content.
-Chrome asks to allow local network access instead; elsewhere, open the agent over http
+Chrome asks to allow local network access instead (on Android, Chrome first needs Android's
+"Nearby devices" or "Local network" permission under Settings → Apps → Chrome); elsewhere, open the agent over http
 from the server itself (put `hermit-agent-standalone.html` into a folder as `index.html`,
 start llama.cpp with `--path <that folder>`, open `http://<server-ip>:<port>/` and use
 `http://<server-ip>:<port>/v1` as the API Base URL), or give the server https, e.g. with
