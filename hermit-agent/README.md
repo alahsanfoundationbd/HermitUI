@@ -31,7 +31,7 @@
   </a>
 </div>
 
-> **Status: v0.3.22** (Phase 3.7, a plan you can see). One self-contained HTML file,
+> **Status: v0.3.23** (Phase 3.7, a plan you can see). One self-contained HTML file,
 > [`dist/hermit-agent-standalone.html`](dist/hermit-agent-standalone.html) (about 11 MB,
 > Python included). It is developed here, separately from the main app in
 > [`../src/`](../src/), so it can move fast without destabilising HermitUI.
@@ -52,6 +52,16 @@ It works with any OpenAI-compatible server: llama.cpp, Ollama, LM Studio, vLLM, 
 3. Open Settings and set the API Base URL (default `http://localhost:9931/v1`), the
    model and, if needed, the key. **Test Connection** checks them.
 4. Drop files into the workspace, describe the task, and press **Start**.
+
+**A server on another device** (the agent on a phone, the model on a computer at home):
+the server has to listen on the network (llama.cpp `--host 0.0.0.0`), and the hosted page
+is https while a LAN server is usually plain http, which browsers block as mixed content.
+Chrome asks to allow local network access instead; elsewhere, open the agent over http
+from the server itself (put `hermit-agent-standalone.html` into a folder as `index.html`,
+start llama.cpp with `--path <that folder>`, open `http://<server-ip>:<port>/` and use
+`http://<server-ip>:<port>/v1` as the API Base URL), or give the server https, e.g. with
+`tailscale serve`. Settings for other servers are in
+[HermitUI's README](../README.md#a-server-on-another-device-phone-tablet-second-pc).
 
 The agent needs a model that can recover from its own errors. The reference tasks pass with Qwen3.8-27B at reasoning effort Low (see [ROADMAP.md](ROADMAP.md)). If the server drops mid-task, the agent retries for two minutes and then pauses: nothing is lost, and Retry resumes where it stopped.
 

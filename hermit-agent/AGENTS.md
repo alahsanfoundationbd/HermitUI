@@ -94,7 +94,8 @@ See [tests/README.md](tests/README.md). The page's CSP blocks `eval`, so Playwri
 |---|---|---|---|
 | `escapeHtml`, `gunzipToBytes`, `createThrottle`, `parseThinkSegments` | `script.js` | `28483fc` | unchanged |
 | `apiEndpoint`, `normalizeApiUrl`, `apiRoot`, `CLOUD_PROVIDERS`, `detectCloudProvider`, `isLocalEndpoint`, `describeRemoteEndpoint`, `isBlockedMixedContent` | `script.js` | `28483fc` | unchanged (example URL in the error text says :9931) |
-| `chatErrorHint` | `script.js` | `28483fc` | wllama branch dropped; context-overflow advice says "rewind"; its overflow regex moved into `isContextOverflowError` (shared with auto-compaction); agent wording via `retriedMs` (paused after retries) and `autoCompact` (overflow advice) |
+| `endpointFetch` | `script.js` | `d8f84f6` | unchanged; the context-size lookup in the model list goes through it too |
+| `chatErrorHint` | `script.js` | `28483fc`, mixed-content hint `d8f84f6` | wllama branch dropped; context-overflow advice says "rewind"; its overflow regex moved into `isContextOverflowError` (shared with auto-compaction); agent wording via `retriedMs` (paused after retries) and `autoCompact` (overflow advice) |
 | `parseReasoningTemplateSupport`, `REASONING_PARAM_KEYS`, `looksLikeReasoningRejection` | `script.js` | `28483fc` | unchanged |
 | `buildReasoningParams` | `script.js` | `28483fc` | external-endpoint path only (no wllama kwargs path) |
 | `probeReasoningSupport` | `script.js` | `28483fc` | returns levels plus the context size and where it came from: llama.cpp's `n_ctx`, Ollama's `num_ctx`, else the model list (vLLM, LM Studio, OpenRouter-style); runs automatically before the first request |

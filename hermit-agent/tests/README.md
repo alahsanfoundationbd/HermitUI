@@ -67,6 +67,8 @@ the `FUNCS` list with the rename. Only DOM-free code can be covered this way.
     file), the system prompt's list, `packageFailureMessage` (offline, CDN down,
     redirected outside the CDN), `moduleNotFoundHint`.
   - `readEntry` on a fake dropped folder read in batches, and the exported retry note.
+  - `endpointFetch`: only an https page calling a non-loopback `http://` endpoint gets
+    `targetAddressSpace: "local"` (Chrome's local network permission), and the matching hint.
 - **`richoutput.test.mjs`** covers Phase 2b:
   - `describeBinary` on hand-built headers (PNG, a progressive JPEG behind other
     segments, GIF, the three WebP kinds, a top-down BMP, `.npy`, a pickle, PDF, tar, WAV,

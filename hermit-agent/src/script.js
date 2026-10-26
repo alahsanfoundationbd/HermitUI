@@ -13,7 +13,7 @@
 // of this file by name.
 
 // ========== 1. Configuration ==========
-const APP_VERSION = "0.3.22";
+const APP_VERSION = "0.3.23";
 const PYODIDE_VERSION = "0.29.5";
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.29.5/full/";
 // Pure-Python libraries bundled into the HTML (Phase 3.5, DESIGN §8). Pyodide leaves
@@ -259,6 +259,15 @@ function isBlockedMixedContent(rawUrl) {
     return !(host === "localhost" || host.endsWith(".localhost") || /^127\./.test(host) || host === "[::1]" || host === "::1");
 }
 
+// fetch() for the endpoint. Chrome's Local Network Access lets an https page reach a
+// plain-http server on the LAN after a permission prompt, but only when it knows the
+// target is local before resolving it: a private IP literal or a .local name on its
+// own, any other hostname (pc.fritz.box) only with targetAddressSpace. A request the
+// field can't help was blocked as mixed content anyway; other browsers ignore it.
+function endpointFetch(url, init) {
+    return fetch(url, isBlockedMixedContent(url) ? { ...init, targetAddressSpace: "local" } : init);
+}
+
 // One line of "what to do about it" shown under a failed request; the raw error stays
 // visible above it. Pure, so it is unit-tested. "" means the error says enough.
 // (HermitUI's wllama branch is dropped: the agent has no in-browser backend yet.)
@@ -286,7 +295,7 @@ function chatErrorHint(message, opts) {
     // Chrome says "Failed to fetch", Firefox "NetworkError when attempting to fetch
     // resource", Safari "Load failed" — all of them hide the actual reason.
     if (/Failed to fetch|NetworkError|^Load failed$/i.test(msg)) {
-        if (mixedContent) return "This page is served over https, so the browser blocks plain-http servers on your network — use localhost, an https endpoint, or open the agent over http.";
+        if (mixedContent) return "This page is served over https and the server over plain http — Chrome lets that through once you allow local network access (also in its site settings); other browsers block it, so open the agent over http or give the server https (README: “A server on another device”).";
         return (isLocalEndpoint(apiUrl)
             ? `Couldn't reach ${apiUrl}${retried} — make sure the server is running and allows CORS from this page.`
             : `Couldn't reach ${apiUrl}${retried} — check the URL and your connection; the provider must also allow requests from a browser (CORS).`) + resume;
@@ -3585,7 +3594,7 @@ async function streamChat(payload, signal, onDelta) {
         clearTimeout(stallTimer);
         stallTimer = setTimeout(() => { stalled = true; ctrl.abort(); }, LIMITS.streamStallMs);
     };
-    const postChat = (body) => fetch(chatUrl, {
+    const postChat = (body) => endpointFetch(chatUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (SETTINGS.apiKey || "none") },
         body: JSON.stringify(body),
@@ -3831,7 +3840,7 @@ async function probeModelListContext(url, key, model) {
     let tools = "unknown", toolsSource = "";
     const fromList = async (listUrl, source) => {
         try {
-            const res = await fetch(listUrl, { headers });
+            const res = await endpointFetch(listUrl, { headers });
             reached = true;
             if (!res.ok) return null;
             const data = await res.json();
@@ -3855,7 +3864,7 @@ async function probeTemplateCaps(url, key, model) {
     const headers = { "Authorization": "Bearer " + (key || "none") };
     let nCtx = 0, reached = false, tools = "unknown", toolsSource = "";
     try {
-        const res = await fetch(root + "/props", { headers });
+        const res = await endpointFetch(root + "/props", { headers });
         reached = true;
         if (res.ok) {
             const p = await res.json();
@@ -3873,7 +3882,7 @@ async function probeTemplateCaps(url, key, model) {
         }
     } catch (e) { /* no /props here — try Ollama next */ }
     try {
-        const res = await fetch(root + "/api/show", {
+        const res = await endpointFetch(root + "/api/show", {
             method: "POST",
             headers: Object.assign({ "Content-Type": "application/json" }, headers),
             body: JSON.stringify({ model }),
@@ -6473,7 +6482,7 @@ async function testConnection() {
     try {
         const url = normalizeApiUrl($("settingUrl").value);
         const key = $("settingApiKey").value.trim();
-        const res = await fetch(apiEndpoint(url, "/models"), { headers: { "Authorization": "Bearer " + (key || "none") } });
+        const res = await endpointFetch(apiEndpoint(url, "/models"), { headers: { "Authorization": "Bearer " + (key || "none") } });
         if (!res.ok) {
             let detail = res.statusText || "Unknown Error";
             try { const j = await res.json(); detail = (j.error && (j.error.message || j.error)) || detail; } catch { /* not JSON */ }

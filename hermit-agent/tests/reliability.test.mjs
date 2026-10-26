@@ -266,4 +266,28 @@ section("10. Export: the retry note survives");
     check("the transcript shows it", X.transcriptMarkdown(s).includes("> 🔌 The endpoint answered again"));
 }
 
+
+section("11. Local network requests from an https page");
+{
+    // Both read the page's scheme from `location`, and endpointFetch calls `fetch`: stub them.
+    const realFetch = globalThis.fetch;
+    let seen;
+    globalThis.fetch = (url, init) => { seen = init; return Promise.resolve(url); };
+    const on = (protocol, url, init) => { globalThis.location = { protocol }; seen = undefined; X.endpointFetch(url, init); return seen; };
+    const init = { method: "POST", headers: { a: "1" } };
+    check("an https page calling a plain-http LAN name asks Chrome for local network access",
+        on("https:", "http://pc.fritz.box:8080/v1/chat/completions", init).targetAddressSpace === "local");
+    check("…and keeps the request's own options", on("https:", "http://192.168.1.20:8080/v1/models", init).headers.a === "1");
+    check("…without changing the caller's object", !("targetAddressSpace" in init));
+    check("loopback needs no permission", on("https:", "http://localhost:8080/v1/models", init) === init);
+    check("an https endpoint is left alone", on("https:", "https://api.openai.com/v1/models", init) === init);
+    check("an http or file page is left alone", on("http:", "http://192.168.1.20:8080/v1/models", init) === init
+        && on("file:", "http://192.168.1.20:8080/v1/models", init) === init);
+    const hint = X.chatErrorHint("Failed to fetch", { apiUrl: "http://192.168.1.20:8080/v1", mixedContent: true });
+    check("the mixed-content hint names Chrome's prompt and the ways around it",
+        /local network access/.test(hint) && /over http/.test(hint) && !/CORS/.test(hint), hint);
+    globalThis.fetch = realFetch;
+    delete globalThis.location;
+}
+
 report();
