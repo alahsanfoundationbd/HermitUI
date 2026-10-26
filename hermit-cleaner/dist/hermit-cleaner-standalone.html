@@ -736,7 +736,7 @@ body.is-running .options {
 // counting, so keep literal braces out of their regexes, strings and comments); the
 // DOM wiring is at the bottom.
 
-const APP_VERSION = "0.4.6";
+const APP_VERSION = "0.4.7";
 
 // ========== Stage 1: character cleanup ==========
 
@@ -1886,6 +1886,16 @@ function splitLetterFrame(text) {
     return { head, body, tail, letter: a > 0 || b < lines.length };
 }
 
+// A German letter's first word after a greeting that ends in a comma ("Liebe Mitglieder,")
+// is written small, as the original body has it: the rewrite opens with "Ab dem 1. M\u00e4rz".
+// Only words that are never nouns are lowered; "Sie", "Ihr" and nouns keep their capital.
+const GREETING_SMALL_WORDS = new Set("ab am an auf aus bei bis bitte da damit dann das dass dem den der die diese diesem diesen dieser dieses durch ein eine einem einen einer es f\u00fcr gerne gestern heute hier ich im in leider mit morgen nach nun schon seit so um und unser unsere unseren unserem unserer vielen vom von vor wie wir zum zur".split(" "));
+function greetingCase(head, orig, body, lang) {
+    const first = String(orig || "").match(/\p{L}/u);
+    if (lang !== "de" || !/,\s*$/.test(String(head || "")) || !first || first[0] === first[0].toUpperCase()) return body;
+    return String(body).replace(/^(\p{Lu})(\p{Ll}*)(?![\p{L}])/u, (w, a, b) => GREETING_SMALL_WORDS.has(w.toLowerCase()) ? a.toLowerCase() + b : w);
+}
+
 // Examples named in the prompts, in the text's own language only (English for any
 // other, as with STOCK_PHRASES): naming German in an English prompt pulls small models
 // into German.
@@ -1926,6 +1936,8 @@ const WHOLE_PASSES = [
     // then a row of sentences opening alike reworded (buildPlainRuleMessages).
     { id: "words", label: "using everyday words", temperature: 0.5 },
     { id: "split", label: "splitting long sentences", temperature: 0.3 },
+    // Each split acceptSplit let through, checked against its sentence: "ja" or "nein: ...".
+    { id: "splitcheck", label: "checking the split sentences", temperature: 0, notes: true },
     { id: "openers", label: "varying sentence openings", temperature: 0.4 },
     // English: what kind of text it is (TEXT_KINDS), for the speaker pass; then one edit
     // of one kind per pass (WHOLE_PLAIN_EN), each with a little thinking.
@@ -1969,7 +1981,9 @@ function isFirstPerson(text, lang) {
 
 // Pass "plan" (Rewrite freely): how the content changes, as a short list for the
 // rewrite: the main claim, the points to drop and merge, the opening, which point gets
-// the room, an example from the text's own facts, a limit or doubt, and the end.
+// the room, an example from the text's own facts, and the end. No limit or doubt: asked
+// for one, the plan made up a claim in nearly half the texts ("libraries cannot solve deep
+// poverty", "the margin only works for a small shop") and once turned the writer's position.
 function buildPlanMessages(text, lang, critique, letter) {
     const ex = WHOLE_EXAMPLES[lang] || WHOLE_EXAMPLES.en;
     return [
@@ -1983,7 +1997,6 @@ function buildPlanMessages(text, lang, critique, letter) {
             + "- the opening: the writer's position or a plain fact from the text, in one sentence; not a scene, an example, a question or the thesis in grand words\n"
             + "- the one point that gets most of the room, and the minor points that shrink to a clause or a sentence inside another paragraph instead of a paragraph of their own\n"
             + "- at most one example, and only one built from the text's own facts; no invented scene\n"
-            + "- one limit or doubt the writer could honestly add: where a point doesn't hold, or what they are unsure of\n"
             + "- the one point the text ends on: a specific one, not a summary, moral or outlook\n"
             + "Keep the core message and the writer's position. Name each point by quoting a few of the text's words; say what to change, not how to word it. At most 10 bullets, no rewrite."
             + (critique ? "\n\nAn editor found these machine-like features in the text:\n" + String(critique).trim() : "") },
@@ -2025,6 +2038,20 @@ function buildSplitMessages(sentence) {
         { role: "user", content: String(sentence).trim() },
     ];
 }
+// Pass "splitcheck": does the split still say what the sentence said? Asked to judge
+// strictly ("allein verst\u00e4ndlich", "worauf sich ein Wort bezieht"), the model refused 40 %
+// of good splits, every one with "Das ..." or "Er ..." pointing back; asked only for a
+// changed claim, a broken sentence or a repeat, it caught a flipped comparison ("anders
+// als die meisten" -> "Die meisten ... arbeiten anders"), a lost condition and a turned
+// reference at few false alarms.
+function buildSplitCheckMessages(sentence, split) {
+    return [
+        { role: "system", content: "Ein Satz A wurde in zwei oder drei S\u00e4tze B geteilt. Antworte \"nein\" nur, wenn B etwas anderes behauptet als A (ein Vergleich, eine Bedingung, ein Gegensatz, eine Frage oder eine Ursache ist verloren oder umgedreht), wenn ein Satz in B kein vollst\u00e4ndiger Satz ist oder ein falsches Wort hat, oder wenn B etwas zweimal sagt. "
+            + "Dass B k\u00fcrzere S\u00e4tze hat und ein Satz mit \"das\", \"dies\", \"dort\", \"damit\", \"er\" oder \"sie\" auf den vorigen zeigt, ist richtig so. Antworte mit genau einer Zeile: \"ja\", oder \"nein: <was falsch ist>\"." },
+        { role: "user", content: `A: ${String(sentence).trim()}\nB: ${String(split).trim()}` },
+    ];
+}
+
 // Words that carry a split sentence's logic, each with the words that may stand for it
 // in the parts ("weil" -> "denn", "deshalb"): a split that has fewer of them lost a
 // condition, a purpose, an "oder" or a "nicht" ("ohne dass es schlechter wird" ->
@@ -2033,6 +2060,8 @@ const SPLIT_KEEP = [
     ["dass", "dass"], ["damit", "damit"], ["ohne", "ohne"], ["statt|anstatt", "statt|anstatt"], ["wenn|falls|sofern", "wenn|falls|sofern"], ["ob", "ob"], ["oder", "oder"],
     ["nicht|kein|keine|keinen|keinem|keiner|keines|nie|niemals|nichts|niemand", "nicht|kein|keine|keinen|keinem|keiner|keines|nie|niemals|nichts|niemand"],
     ["obwohl|obgleich", "obwohl|obgleich|trotzdem|dennoch|aber|doch|zwar"], ["weil", "weil|denn|deshalb|daher|darum|deswegen|n\u00e4mlich"], ["sodass", "sodass|deshalb|daher|dadurch|so"],
+    // "w\u00e4hrend" as a conjunction only: after a comma, or opening the sentence but not before an article ("W\u00e4hrend der Woche").
+    ["(?<=,\\s{0,3})w\u00e4hrend|^w\u00e4hrend(?!\\s+(?:de[mnrs]|dies(?:e[mnrs]?)?|eine[mnrs]?)(?![\\p{L}]))", "w\u00e4hrend|aber|doch|dagegen|jedoch"],
 ];
 // A part may open with a link word only when the sentence had that link.
 const SPLIT_LINKS = [
@@ -2042,7 +2071,11 @@ const SPLIT_LINKS = [
 
 // The split of `sentence` in `reply`, or null: two or three sentences of four words or
 // more, not opening alike, every number and logic word kept (SPLIT_KEEP), no link word
-// the sentence did not have (SPLIT_LINKS), about as long as the sentence.
+// the sentence did not have (SPLIT_LINKS), about as long as the sentence. A part that
+// is only a "Statt/Ohne/Um ... zu" phrase is a fragment ("Statt pauschale Limits zu
+// verh\u00e4ngen."), and three words in a row that come back in a second part were said
+// twice ("Ohne diese Kontakte w\u00fcrde die Isolation schnell greifen. Besonders wo ...,
+// w\u00fcrde die Isolation schnell greifen.").
 function acceptSplit(sentence, reply) {
     const s = String(sentence || "").trim();
     let t = stripThinking(reply).replace(/\s+/g, " ").trim();
@@ -2056,6 +2089,10 @@ function acceptSplit(sentence, reply) {
     const count = (x, alt) => (x.match(new RegExp(`(?<![\\p{L}])(?:${alt})(?![\\p{L}])`, "giu")) || []).length;
     if (SPLIT_KEEP.some(([a, b]) => count(t, b) < count(s, a))) return null;
     if (parts.some((p, i) => i && SPLIT_LINKS.some(([a, b]) => count(first(p), a) && !count(s, b)))) return null;
+    if (parts.some(p => /^(?:an)?statt\s|^ohne\s|^um\s/i.test(p) && !p.includes(",") && /\szu\s+\p{L}+\W*$/u.test(p))) return null;
+    const trigrams = x => { const w = x.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []; return w.slice(2).map((c, i) => w[i] + " " + w[i + 1] + " " + c); };
+    const inSentence = trigrams(s);
+    if (parts.some((p, i) => trigrams(p).some(g => parts.some((q, j) => j > i && trigrams(q).includes(g)) && inSentence.filter(x => x === g).length < 2))) return null;
     const r = words(t) / Math.max(1, words(s));
     return r >= 0.75 && r <= 1.4 ? t : null;
 }
@@ -2066,11 +2103,11 @@ function acceptSplit(sentence, reply) {
 const SPEAKER_LIMITS = "One or two such words per paragraph, not on every sentence. A claim from people or reports the text names is told as what they found. Plain facts, numbers, history and instructions stay as they are. Name no source the text doesn't name and give the writer no experiences the text doesn't give them.";
 const TEXT_KINDS = {
     A: { id: "own", label: "the writer, their team or their company tells about their own work, product, plans or experience",
-        speaker: "as what the writer or their team saw, did or noticed (\"the team pushed back\", \"we noticed\"), never as a guess" },
+        speaker: "as what the writer or their team saw or noticed, never as a guess", forms: "\"we noticed\", \"we found\", \"the team found\"" },
     B: { id: "howto", label: "instructions or advice that tell the reader what to do",
-        speaker: "as what the reader will see or find when they do it (\"you'll notice\", \"you'll find\")" },
+        speaker: "as what the reader will notice when they do it", forms: "\"you'll notice\", \"you'll find\"" },
     C: { id: "argue", label: "the writer argues for a position or an opinion",
-        speaker: "as the writer's own expectation or doubt (\"I'd expect\", \"I don't think\")" },
+        speaker: "as the writer's own view", forms: "\"I think\", \"I'd expect\", \"I doubt\"" },
 };
 
 // Pass "kind": one letter of TEXT_KINDS for the text.
@@ -2088,11 +2125,16 @@ function parseTextKind(reply) {
     return m ? m[1].toUpperCase() : null;
 }
 
-// The speaker rule for one kind of text. With only one form on offer the model repeats
-// it ("You'll find that ..." opening every paragraph), hence the last line.
+// The speaker rule for one kind of text: at most one per paragraph, on a judgement only,
+// with a few plain forms that may come back. Told to word every one differently, the
+// model reached for "you'll come to notice" and "I'd wager", and put a speaker on plain
+// facts and plans ("We noticed you save money on heating", "Hospitals don't close, I'd
+// expect"); with these forms half as many lines came out, and half of those read well.
 function speakerRule(kind) {
-    return "every general claim the text states as a plain fact without saying where it comes from is given a speaker, "
-        + TEXT_KINDS[kind].speaker + ". " + SPEAKER_LIMITS + " Word each one differently: never the same words twice.";
+    return "in each paragraph at most one judgement or generalization the text states as a plain fact without saying where it comes from is given a speaker, "
+        + TEXT_KINDS[kind].speaker + ", with one of these plain forms at the start of the clause: " + TEXT_KINDS[kind].forms + ". The same form may come back in a later paragraph. "
+        + "Never on a fact, a number, a step or an instruction, and never tacked on at the end (\", I'd expect.\"). A paragraph without such a claim stays as it is. "
+        + "A claim from people or reports the text names is told as what they found. Name no source the text doesn't name and give the writer no experiences the text doesn't give them.";
 }
 
 // The English passes of Plainer, in order. Each changes one kind of sentence and leaves
@@ -2388,6 +2430,45 @@ function buildProofreadMessages(text, lang) {
     ];
 }
 
+// Pass "proof", German: the model lists the mistakes it finds, each with its fix, and the
+// code applies them (applyProofFixes). Asked for the whole text back, it returned it
+// unchanged even around a known slip: a long text that is mostly right looks fine to it.
+function buildProofFindMessages(text) {
+    return [
+        { role: "system", content: "Lies den Text und finde echte Fehler: Grammatik (Fall, Einzahl/Mehrzahl, Verbform), ein fehlendes Verb oder Wort, ein falsches Wort, ein Satz, der so keinen Sinn ergibt. "
+            + "Stil, Satzl\u00e4nge und lockere W\u00f6rter sind keine Fehler. Antworte mit einer Zeile pro Fehler: - \"genaues Zitat aus dem Text\" -> \"korrigiert\". Gibt es keinen Fehler, antworte nur OK." },
+        { role: "user", content: String(text).trim() },
+    ];
+}
+
+// The fixes of a proof find list (`- "quote" -> "fix"`) applied to `text`. A line counts
+// only as a small edit of words found once in the text: a note in the fix ("(Hinweis: kein
+// Fehler ...)") goes, a line that repeats its quote is skipped, and so is a fix that
+// changes a number, also one inside a word ("dreistelligen" -> "f\u00fcnfstelligen": a
+// proofreading never corrects facts), keeps less than 60 % of the quote's words (two
+// may change in a short one: "keine gro\u00dfe Zeit" -> "nicht viel Zeit") or changes more
+// than four words (or 40 % of a long quote). Returns the text, the `fixes` applied as
+// [quote, fix] and how many lines were `listed`.
+function applyProofFixes(text, reply) {
+    let t = String(text || "");
+    const fixes = [];
+    let listed = 0;
+    const line = /^\s*(?:[-*\u2022]|\d+[.)])?\s*["\u201c\u201e]([^"\u201c\u201d\u201e\n]+)["\u201c\u201d]\s*(?:->|\u2192)\s*["\u201c\u201e]([^"\u201c\u201d\u201e\n]*)["\u201c\u201d]/gm;
+    const words = x => (x.match(/[\p{L}\p{N}]+/gu) || []).length;
+    const stems = x => (x.toLowerCase().match(/zwei|drei|vier|f\u00fcnf|sechs|sieben|acht|neun|zehn|elf|zw\u00f6lf|zwanzig|drei\u00dfig|hundert|tausend|million|milliard/g) || []).sort().join();
+    for (const [, q, raw] of stripThinking(reply).matchAll(line)) {
+        listed++;
+        const f = raw.replace(/\s*\((?:Hinweis|Anmerkung|kein Fehler|Note)\b[^)]*\)?\s*$/i, "").trim();
+        if (!f || f === q.trim() || t.split(q).length !== 2) continue;
+        if (missingNumbers(q, f).length || addedNumbers(q, f).length || stems(q) !== stems(f)) continue;
+        const n = words(q), kept = wordDiff(q, f).common;
+        if (kept < Math.min(0.6 * n, n - 2) || Math.max(n, words(f)) - kept > Math.max(4, Math.ceil(0.4 * n))) continue;
+        t = t.replace(q, () => f);
+        fixes.push([q, f]);
+    }
+    return { text: t, fixes, listed };
+}
+
 // Pass "facts": what the rewrite got wrong against the original (and the writer's
 // details), as a list, or "OK". What a rewrite is meant to drop (a repeated point, a
 // moral, a closing summary, a weaker argument) and the marked illustration are named
@@ -2535,8 +2616,10 @@ const META_COMMENT_RE = /\b(?:the (?:original|rewrite|rewritten text|source text
 // came in, `prev` the text the pass was given. The rewrite may change everything but
 // must stay roughly as long as the original, in its language and form of address; a
 // later pass that was told to touch only a few spots must stay close to `prev`, and a
-// fix that went back to the original's wording is refused.
-function acceptWholeRewrite(orig, prev, reply, lang, pass) {
+// fix that went back to the original's wording is refused. The rewrite of a letter's body
+// (`letter`) may come down to a quarter when it keeps every number: an honest rewrite of a
+// newsletter full of empty courtesy came to 0.28 of it.
+function acceptWholeRewrite(orig, prev, reply, lang, pass, letter) {
     let t = stripThinking(reply);
     const o = String(orig || "").trim(), p = String(prev || "").trim();
     if (t.length > 1 && /^["'\u201c\u201e]/.test(t) && /["'\u201c\u201d]$/.test(t) && !/^["'\u201c\u201e]/.test(p)) t = t.slice(1, -1).trim();
@@ -2545,7 +2628,8 @@ function acceptWholeRewrite(orig, prev, reply, lang, pass) {
     if (PREAMBLE_RE.test(t) && !(PREAMBLE_RE.test(p) && lead(t) === lead(p))) return { ok: false, reason: "the model added an introduction" };
     // A later pass is measured against the text it was given: a free rewrite may already
     // be much shorter than the original.
-    if (t.length / Math.max(1, (pass === "rewrite" ? o : p).length) < 0.3) return { ok: false, reason: "reply much shorter than the original" };
+    const short = pass === "rewrite" && letter && !missingNumbers(o, t).length ? 0.25 : 0.3;
+    if (t.length / Math.max(1, (pass === "rewrite" ? o : p).length) < short) return { ok: false, reason: "reply much shorter than the original" };
     if (t.length / Math.max(1, o.length) > 1.8) return { ok: false, reason: "reply much longer than the original" };
     const got = lang ? detectLanguage(t) : null;
     if (got && got !== lang) return { ok: false, reason: `the model answered in ${LANGUAGE_NAMES[got]} instead of ${LANGUAGE_NAMES[lang]}` };
@@ -2610,7 +2694,7 @@ async function wholeRewrite(text, lang, o, chat) {
     const use = (id, reply) => {
         // A letter's frame is put back afterwards: one the model wrote anyway goes.
         if (frame.letter) reply = splitLetterFrame(stripThinking(String(reply || "")).trim()).body;
-        const v = acceptWholeRewrite(orig, cur, reply, lang, id);
+        const v = acceptWholeRewrite(orig, cur, reply, lang, id, frame.letter);
         if (v.ok) cur = v.text;
         info.passes.push({ id, ok: v.ok, reason: v.ok ? "" : v.reason });
         return v;
@@ -2658,17 +2742,20 @@ async function wholeRewrite(text, lang, o, chat) {
         info.flagged = bullets(review);
         if (info.flagged) await edit("sentences", t => buildSentenceFixMessages(t, lang, review));
         // A number the free rewrite dropped may have gone with its point: the fact check
-        // gets the list and decides.
-        const facts = () => buildFactCheckMessages(orig, cur, lang, o.details, o.free, missingNumbers(orig, cur));
-        // Found in code, not by the model: a number the original never had, a point said twice.
-        const added = () => addedNumbers(orig, cur).map(n => `- "${n}" is not in the original -> take it out, or say what the original says`)
-            .concat(repeatedSentences(orig, cur).map(([a, b]) => `- "${b}" says again what "${a}" says -> say it once, unless the second adds something`));
-        info.errors = factCheckErrors(await chat("facts", facts(), notesTokens)).filter(isFactError)
-            .concat(o.free ? [] : missingNumbers(orig, cur).map(n => `- the number "${n}" of the original is missing -> put it back where it belongs`), added()).slice(0, 12);
+        // gets the list and decides. (Checked one paragraph at a time against the whole
+        // original, it found more changed meanings in known cases, but not in fresh texts,
+        // at two to three times the time.)
+        const factCheck = async id => factCheckErrors(await chat(id, buildFactCheckMessages(orig, cur, lang, o.details, o.free, missingNumbers(orig, cur)), notesTokens)).filter(isFactError);
+        // Found in code, not by the model, and listed first: a number lost (unless the
+        // rewrite was free) or made up, a point said twice.
+        const found = () => (o.free ? [] : missingNumbers(orig, cur).map(n => `- the number "${n}" of the original is missing -> put it back where it belongs`))
+            .concat(addedNumbers(orig, cur).map(n => `- "${n}" is not in the original -> take it out, or say what the original says`),
+                repeatedSentences(orig, cur).map(([a, b]) => `- "${b}" says again what "${a}" says -> say it once, unless the second adds something`));
+        info.errors = found().concat(await factCheck("facts")).slice(0, 12);
         if (info.errors.length) {
             info.fixed = use("fix", await chat("fix", buildFactFixMessages(orig, cur, lang, info.errors), textTokens)).ok;
             // What a second check finds goes to the report, not to another round of fixes.
-            if (info.fixed) info.remaining = factCheckErrors(await chat("recheck", facts(), notesTokens)).filter(isFactError);
+            if (info.fixed) info.remaining = await factCheck("recheck");
         }
         const spots = wholeSpotNotes(cur, lang, orig);
         info.spotsFound = spots.length;
@@ -2692,7 +2779,7 @@ async function wholeRewrite(text, lang, o, chat) {
                 info.splits = [0, long.length];
                 for (const s of long) {
                     const t = acceptSplit(s, await chat("split", buildSplitMessages(s), Math.min(600, 64 + s.length)));
-                    if (t) { split = split.replace(s, () => t); info.splits[0]++; }
+                    if (t && !/^\W*nein\b/i.test(stripThinking(await chat("splitcheck", buildSplitCheckMessages(s, t), 80)))) { split = split.replace(s, () => t); info.splits[0]++; }
                 }
                 if (split !== cur) use("split", split);
                 const run = [sameOpenerRun(cur), sameOpenerRun(cur, 1)].find((r, i) => r.n >= (i ? 3 : 2));
@@ -2703,7 +2790,7 @@ async function wholeRewrite(text, lang, o, chat) {
                 info.kind = kind ? TEXT_KINDS[kind].id : null;
                 for (const p of WHOLE_PLAIN_EN) await edit(p.id, t => buildOneRuleMessages(t, p.id === "speaker" && kind ? speakerRule(kind) : p.rule), think);
             }
-            const errs = factCheckErrors(await chat("facts", facts(), notesTokens)).filter(isFactError).concat(added()).slice(0, 12);
+            const errs = found().filter(e => !/^- the number /.test(e)).concat(await factCheck("facts")).slice(0, 12);
             if (errs.length) {
                 info.errors = info.errors.concat(errs);
                 use("fix", await chat("fix", buildFactFixMessages(orig, cur, lang, errs), textTokens));
@@ -2712,15 +2799,22 @@ async function wholeRewrite(text, lang, o, chat) {
                 if (again.length) use("spots", await chat("spots", buildSpotFixMessages(cur, lang, again), textTokens));
             }
         }
-        use("proof", await chat("proof", buildProofreadMessages(cur, lang), textTokens));
-        // Unchanged is the usual answer here, not a refusal.
-        const last = info.passes[info.passes.length - 1];
-        if (last.id === "proof" && last.reason === "the model changed nothing") info.passes.pop();
+        if (lang === "de") {
+            const p = applyProofFixes(cur, await chat("proof", buildProofFindMessages(cur), notesTokens));
+            info.proofed = [p.fixes.length, p.listed];
+            if (p.fixes.length) use("proof", p.text);
+        } else {
+            use("proof", await chat("proof", buildProofreadMessages(cur, lang), textTokens));
+            // Unchanged is the usual answer here, not a refusal.
+            const last = info.passes[info.passes.length - 1];
+            if (last.id === "proof" && last.reason === "the model changed nothing") info.passes.pop();
+        }
         info.missing = missingNumbers(orig, cur);
     } catch (e) {
         if (e && e.name === "AbortError") info.stopped = true;
         else info.error = e;
     }
+    cur = greetingCase(frame.head, orig, cur, lang);
     info.change = wordDiff(orig, cur).ratio;
     info.after = cur.length;
     return { frame, body: cur, info };

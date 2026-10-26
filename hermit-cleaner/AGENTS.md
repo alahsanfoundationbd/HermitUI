@@ -152,6 +152,8 @@ poll with `page.evaluate` instead.
   **Rewrite freely** is the same call with `o.free`: a `plan` pass
   (`buildPlanMessages`) before the rewrite, content rules in place of the keep-every-claim
   ones, a fact check that allows dropped points, and no missing-number errors for the fix.
+  The plan asks for no limit or doubt: asked for one, it made a claim up in nearly half
+  the texts and once turned the writer's position around.
   **Plainer** (`#optPlain`, `o.plain`, German and English text, off by default): passes
   before the proofreading, then the fact check and fix once more. German: one job per pass, as for English, since one `plain` prompt holding all the
   rules was followed only in part. `words` (`buildPlainRuleMessages` with
@@ -165,9 +167,14 @@ poll with `page.evaluate` instead.
   `acceptSplit` keeps the original sentence when the answer is still one sentence, has a
   fragment, opens two parts alike, loses a number or changes the length much. It also
   counts the words that carry the logic (`SPLIT_KEEP`: "dass", "damit", "ohne", "wenn",
-  "oder", "nicht" ...; "weil" may become "denn" or "deshalb"): fewer of them in the parts
-  means a lost condition or purpose ("ohne dass es schlechter wird" -> "Es wird nicht
-  schlechter"). A part may open with "Deshalb", "Trotzdem" or "Stattdessen" only when the
+  "oder", "nicht", a conjunction "während" ...; "weil" may become "denn" or "deshalb"):
+  fewer of them in the parts means a lost condition, purpose or contrast ("ohne dass es
+  schlechter wird" -> "Es wird nicht schlechter"). A part that is only a "Statt/Ohne/Um
+  ... zu" phrase is a fragment, and three words in a row that come back in a second part
+  were said twice. A split that passes goes to one more short call (`splitcheck`,
+  `buildSplitCheckMessages`) that answers "nein" only for a changed claim, a broken
+  sentence or a repeat: told to judge strictly (a reference across the full stop, "Das
+  ...", "Er ..."), it refused 40 % of good splits. A part may open with "Deshalb", "Trotzdem" or "Stattdessen" only when the
   sentence had that link (`SPLIT_LINKS`; "Dabei" never): "verbunden und bleibt" became
   "verbunden. Deshalb bleibt". `info.splits` is [kept, tried]. `openers`:
   only when a row of sentences opens alike ("Sie sehen ... Sie koennen ..."), one edit
@@ -185,8 +192,11 @@ poll with `page.evaluate` instead.
   that cut (`verdicts`, `alternatives`) may shorten the text to half. Before the five, a
   `kind` pass (`buildTextKindMessages`, `parseTextKind`) reads from the original whether
   the writer tells about their own work, gives instructions, or argues (`TEXT_KINDS`), and
-  the speaker pass gets only that kind's form (`speakerRule`); an unreadable answer keeps
-  the rule with all three.
+  the speaker pass gets only that kind's forms (`speakerRule`, `TEXT_KINDS[k].forms`): at
+  most one per paragraph, on a judgement only, never on a fact, a step or tacked on at the
+  end, and a form may come back. Told to word every one differently, the model put a
+  speaker on plain facts ("We noticed you save money on heating") and reached for "you'll
+  come to notice"; an unreadable answer keeps the rule with all three.
 - **Checks shared by the passes.** `acceptWholeRewrite` refuses a later pass (not the
   fix) that starts more sentences in a row with the same two words than its input had,
   three or more (`sameOpenerRun`): "You can see ... You can download ..." is a list
@@ -202,7 +212,20 @@ poll with `page.evaluate` instead.
   same, `numberWords`), and a point said twice (`repeatedSentences`: content-word overlap
   of 60 % past `REPEAT_COMMON`, not a question, not a repeat the original had). Word
   overlap flags echoes too, so that error asks to say it once "unless the second adds
-  something" and the model decides.
+  something" and the model decides. These code-found errors go first in the list, ahead
+  of the model's, so the cap of 12 never cuts them off. The fact check reads the whole
+  text: checked one paragraph at a time against the whole original, it found more changed
+  meanings in known cases, but not in fresh texts, at two to three times the time.
+- **Proofreading, German** (`buildProofFindMessages`, `applyProofFixes`): the model lists
+  `- "quote" -> "fix"` and the code applies a line only when the quote is found once, the
+  fix changes no number (not even inside a word: "dreistelligen" -> "fünfstelligen"
+  corrected a fact of the original) and it is a small edit. Asked for the whole text back,
+  the model returned it unchanged even around a known slip. `info.proofed` is
+  [applied, listed]. English keeps the whole-text proofreading.
+- **The letter frame.** The rewrite of a letter's body may come to a quarter of it (0.3
+  otherwise) when it keeps every number: an honest rewrite of a newsletter full of empty
+  courtesy came to 0.28. After a German greeting ending in a comma, the body's first word
+  is written small when the original's was and the word is never a noun (`greetingCase`).
 - **Every prompt** starts with `NO_HIDDEN_MARKS` (`withNoHiddenMarks` in `buildChatBody`,
   `buildRewriteBody` and the in-browser path). The e2e mock (`tests/mock_openai.py`) skips
   that first line when it tells the passes apart.

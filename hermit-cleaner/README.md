@@ -4,7 +4,7 @@
 sentences or paragraphs reworded by your own local model (or the whole text rewritten
 in several passes), and a few natural typos.*
 
-> **Status: v0.4.6.** One self-contained HTML file in two flavours:
+> **Status: v0.4.7.** One self-contained HTML file in two flavours:
 > [`dist/hermit-cleaner-standalone.html`](dist/hermit-cleaner-standalone.html) (≈ 380 KB)
 > rewords through a model server, and
 > [`dist/hermit-cleaner-wllama.html`](dist/hermit-cleaner-wllama.html) (≈ 3.6 MB) can also
@@ -122,8 +122,9 @@ Three steps, each one optional:
 **✍️ Rewrite whole text** is a second way to run the model, beside **Run**: it rewrites
 the whole text in one piece instead of sentence by sentence, in several passes: a
 critique, the rewrite, a sentence review, a fact check against the original with a fix,
-a pass over the contrasts and stock phrases found in code, and a proofreading pass. A
-letter's greeting and sign-off are kept as they were. Clean, Tone, Also and Typos apply
+a pass over the contrasts and stock phrases found in code, and a proofreading pass (for
+German text the model lists the mistakes it finds, and only small corrections that change
+no fact or number are made). A letter's greeting and sign-off are kept as they were. Clean, Tone, Also and Typos apply
 as for Run. **About you** takes a few facts about yourself that the rewrite may use as
 your own experience; it invents none. The report says what each pass did and what the
 fact checks found.
@@ -144,12 +145,14 @@ same text.
 **Plainer** (German and English text, off by default) adds passes before the
 proofreading, then runs the fact check once more. German text gets everyday words in
 place of noun chains, then each long sentence split into two or three whole sentences on
-its own (kept as it was when the split fails a check), then, only where needed, a pass
+its own (kept as it was when the split fails a check, or when one more short call finds
+that it changed a claim, broke a sentence or said something twice), then, only where needed, a pass
 for a row of sentences that start alike. English text gets five, each changing one kind of
 sentence and leaving the rest: verdicts and sentences that only set up the next one,
 an objection raised and answered, formal and product-copy phrases, general claims
-without a speaker (what the writer saw, what the reader will find, or the writer's own
-expectation, by the kind of text, which one more short call reads first), and the alternatives and explanations set against a piece of
+without a speaker (at most one per paragraph, on a judgement only, in a few plain forms:
+what the writer noticed, what the reader will notice, or the writer's own view, by the
+kind of text, which one more short call reads first), and the alternatives and explanations set against a piece of
 advice. On a server the rewrite and these five passes run with a little thinking, so
 it takes several minutes on a large model.
 
