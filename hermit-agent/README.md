@@ -31,7 +31,7 @@
   </a>
 </div>
 
-> **Status: v0.3.25** (Phase 3.7, a plan you can see). One self-contained HTML file,
+> **Status: v0.3.26** (Phase 3.7, a plan you can see). One self-contained HTML file,
 > [`dist/hermit-agent-standalone.html`](dist/hermit-agent-standalone.html) (about 11 MB,
 > Python included). It is developed here, separately from the main app in
 > [`../src/`](../src/), so it can move fast without destabilising HermitUI.
@@ -125,7 +125,7 @@ the bundled libraries from jsDelivr and PyPI; `dist/` has all of these inlined.
 
 ## Relationship to HermitUI
 
-It keeps the same brand and philosophy: one HTML file, vanilla JS, no persistence, and any OpenAI-compatible endpoint. The code reuses a lot of HermitUI's tested parts (streaming, think-tag parsing, settings, error hints, and inline build machinery; the full list is in [AGENTS.md](AGENTS.md)). It sits in its own folder with a separate `src/`, `build.py`, and `tests/`, and could merge back into HermitUI later as a build flavor or mode. Check [DESIGN.md §11](DESIGN.md#11-project-layout--merge-path).
+It keeps the same brand and philosophy: one HTML file, vanilla JS, no persistence, and any OpenAI-compatible endpoint. The code reuses a lot of HermitUI's tested parts (streaming, think-tag parsing, settings, error hints, and inline build machinery; the full list is in [DESIGN.md §9](DESIGN.md#9-reuse-map-from-hermitui)). It sits in its own folder with a separate `src/`, `build.py`, and `tests/`, and could merge back into HermitUI later as a build flavor or mode. Check [DESIGN.md §11](DESIGN.md#11-project-layout--merge-path).
 
 ## Documents
 
@@ -135,7 +135,7 @@ It keeps the same brand and philosophy: one HTML file, vanilla JS, no persistenc
 | [ROADMAP.md](ROADMAP.md) | Phases with checklists and exit criteria, from the first spike to the merge decision |
 | [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md) | What the Phase 0 spike measured: offline boot, kill & re-seed, network blocking, GitHub Pages |
 | [PHASE3_5_LIBRARY_STUDY.md](PHASE3_5_LIBRARY_STUDY.md) | Which pure-Python libraries to bundle: cost, whether they work in Pyodide, and what the model reaches for |
-| [AGENTS.md](AGENTS.md) | Rules for anyone (human or AI) working in this folder, build & test commands |
+| [AGENTS.md](AGENTS.md) | Rules for anyone (human or AI) working in this folder: build & test commands, a code map |
 | [REVIEW_NOTES.md](REVIEW_NOTES.md) | Open decisions (MVP, Phases 2a, 2b, 3, 3.5, 3.6 and 3.7), waiting for a review |
 | [tests/README.md](tests/README.md) | What the unit, end-to-end and real-model tests cover |
 | [index.html](index.html) | The [project page](https://moooff.github.io/HermitUI/hermit-agent/), with the demo videos |

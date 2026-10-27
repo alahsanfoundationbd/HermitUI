@@ -99,3 +99,57 @@ speed, use `--backend wllama` or see the table in `../README.md`.
 - `llama-server` started from a shell with `cd dir && ./llama-server &` survives a
   `kill $!` (that kills the subshell), and its VRAM then fails the next run's
   idle-GPU check. `bench.py` keeps the process handle and stops it itself.
+
+## What the Reword rules are based on
+
+The findings behind the Reword rules in [`../AGENTS.md`](../AGENTS.md), from runs of this
+benchmark read side by side. The language finding is the first item above.
+
+- **Levels (2026-10-09).** An example exchange per level moved small models far more
+  than rule wording did (Qwen3-1.7B Medium vs Strong: 24 % vs 40 % median words changed,
+  unchanged replies 13 → 7 of 48). Every model kept numbers and names; 1.7B German turns
+  ungrammatical past Light edits; Qwen3-4B separates the levels best (18 / 37 / 50 %) but
+  once flipped a meaning ("unterschätzen" → "überschätzen"); Gemma-4-E2B writes the best
+  German but changes ~23 % even at Light.
+- **Stock phrases (2026-10-09, 4 models x 11 texts x 3 levels x 2 runs):**
+  - Naming the phrases found beats a fixed example list: at Light the share removed rose
+    from 35-68 % to 70-89 % (the table in `../README.md`), at no extra meaning or grammar
+    cost on Gemma-4 E2B. The best-guess list alone (before the research) got 56-82 %.
+  - Told to cut a sentence that is only a stock phrase but "keep every sentence",
+    Qwen3-4B answered "This email finds you well." and Qwen3-1.7B "This email hopes
+    you're doing well." With the removed "Let that sink in." still in the context,
+    Qwen3-4B wrote it back three times.
+  - With "Nur so kann gewährleistet werden" on the list, Gemma cut "Nur so" as well and
+    lost the "only".
+  - Cutting an adjective or a participle broke the grammar around it ("a comprehensive
+    overview" -> "a overview").
+  - "Here is the revised passage: ..." got accepted while `PREAMBLE_RE` let a reply
+    through because the original started with "Here's".
+  - Models bring in stock phrases of their own even when told not to: Qwen3.5-4B put
+    "Moreover," before an otherwise untouched sentence and called it a Light edit,
+    Qwen3-4B swapped "Par ailleurs" for "En outre".
+  - Small models change more and break more when a passage is dense with phrases:
+    Qwen3-1.7B at Strong once dropped a "40 %" and turned "Frau Weber" into "Herr
+    Müller". Every build also switched a formal German e-mail to "du" now and then
+    (mostly Gemma at Medium/Strong).
+- **Contrasts, greetings, form of address (2026-10-10, v0.3.1 against v0.3.2 on the small
+  ladder):**
+  - Told to drop set-up contrasts, models dodge: "just" -> "only"/"simply", a full stop
+    between the halves ("isn't just a cost. It's ..."), no adverb at all ("isn't code;
+    it's people"). A rule naming the shapes beat an extra few-shot example (27B at
+    Strong: 4/15 -> 1/15 kept vs 2/15).
+  - The second try runs hotter under the retry note and garbled German ("Man baut
+    Vertrauen nicht einfach so auf, sondern man legt es in den Alltag").
+  - Only Qwen3.5-4B of the small models drops contrasts; Qwen3 1.7B/4B and Gemma-4 E2B
+    keep "It's not just about X, it's about Y" through the retry. No time cost measured
+    (within +-15 %).
+  - "Sehr geehrte Frau Weber," came back "Hallo"/"Liebe", and "Mit freundlichen Grüßen"
+    on the line above the name came back as the name (Qwen3-4B, in v0.3.1 too).
+  - Gemma-4 E2B switched the Sie e-mail to "du" in every Medium/Strong run. A generic
+    retry note didn't help (0/4); naming the form to keep did (8/8).
+  - Qwen3.8-27B at Medium, German, by sentence turned "wir bedauern zutiefst" into "wir
+    sind froh" with no retry involved: German meaning errors are a model limit, not a
+    prompt one.
+- **Models that fit the `-wllama` build (2026-10-26, one run):** Qwen3-4B, Qwen3.5-4B,
+  Qwen3-8B, Gemma-4-E4B and Gemma-4-12B were all usable; only Gemma-4-12B had no real
+  defect, and both Qwen3 models flipped "unterschätzen" again.

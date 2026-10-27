@@ -1,7 +1,7 @@
 # HermitUI Agent — Design
 
 Status: **Phases 1 (MVP), 2a (reliability), 2b (rich output), 3 (native tool calls),
-3.5 (bundled libraries) and 3.6 (more file tools) implemented**
+3.5 (bundled libraries), 3.6 (more file tools) and 3.7 (a plan the user can see) implemented**
 in `src/` (see
 [ROADMAP.md](ROADMAP.md)). Where
 the build deviated from the original plan, the section says so; decisions that
@@ -975,7 +975,7 @@ times with the same input). Small in-browser models (Phase 4) do it more.
   Practical options are a local llama.cpp server (`--jinja`) or Ollama with a capable
   coder or instruct model, or any cloud OpenAI-compatible API. Model-specific advice
   goes in the README once real tasks have been tried. No claims before then.
-- **In-browser (wllama), later.** HermitUI's benchmark numbers (root `AGENTS.md`,
+- **In-browser (wllama), later.** HermitUI's benchmark numbers ([`../benchmark/README.md`](../benchmark/README.md),
   dev machine, July 2026) give the realistic floor. Qwen3 0.6B/1.7B are too weak for
   multi-step work. 4B is marginal. gpt-oss-20b loads via Memory64 and decodes at
   ≈ 43 t/s on GPU, which makes it the most plausible fully offline agent model.
@@ -1166,23 +1166,25 @@ tabulate, xmltodict, markdownify, seaborn, plus odfpy (with defusedxml), added o
 
 ## 9. Reuse map from HermitUI
 
-All of these exist in `../src/script.js` (verified 2026-10-03). For now they are
-*copied and adapted*, not imported (see §11).
+Code taken from `../src/` is copied and adapted, not imported (§11). Each row names the
+HermitUI commit it was copied from, so a fix can be ported in either direction; a later
+port adds its commit to the row.
 
-| Need | HermitUI source |
-|---|---|
-| Streaming LLM calls, abort | `fetchAndStreamChat`, `createThrottle` |
-| Think blocks | `parseThinkSegments` |
-| Markdown / highlight / copy rendering | `updateMessageUI`, `appendMessage`, `injectCopyButtons` |
-| Error advice | `chatErrorHint`, `chatErrorHtml` (pure, unit-tested) |
-| Endpoint handling | `normalizeApiUrl`, `apiRoot`, `detectCloudProvider`, the Test Connection flow (`testConnectionBtn`) |
-| Reasoning effort | `setThinkingLevel`, `buildReasoningParams`, `probeReasoningSupport` |
-| Files in | `processFiles`, `isTextFile`, `renderChips` |
-| UI helpers | `showToast`, `escapeHtml`, `copyToClipboard`, `trapModalFocus`, `openModalEl` |
-| Import confirm pattern | `importConfirmModal` flow |
-| Inline decompression | `gunzipToBytes`, the Blob-URL loading of the inlined wllama engine |
-| Build | `../build.py`: pinned downloads with SRI verification, regex CDN substitution, gzip+base64 inlining, `@wllama` marker stripping |
-| Tests | `../tests/extract.mjs` (slice real functions out of the source), `tests/run.mjs`, the Playwright e2e style |
+| Function / block | From (`../src/…`) | Source commit | Adapted how |
+|---|---|---|---|
+| `escapeHtml`, `gunzipToBytes`, `createThrottle`, `parseThinkSegments` | `script.js` | `28483fc` | unchanged |
+| `apiEndpoint`, `normalizeApiUrl`, `apiRoot`, `CLOUD_PROVIDERS`, `detectCloudProvider`, `isLocalEndpoint`, `describeRemoteEndpoint`, `isBlockedMixedContent` | `script.js` | `28483fc` | unchanged (example URL in the error text says :9931) |
+| `endpointFetch` | `script.js` | `d8f84f6` | unchanged; every endpoint request goes through it: `streamChat`, the probes, `testConnection` and the model-list context lookup |
+| `chatErrorHint` | `script.js` | `28483fc`, mixed-content hint `d8f84f6` | wllama branch dropped; context-overflow advice says "rewind"; its overflow regex moved into `isContextOverflowError` (shared with auto-compaction); agent wording via `retriedMs` (paused after retries) and `autoCompact` (overflow advice). Root's later llama.cpp-sampler hint (`e64cb38`) isn't needed: the agent sends no samplers |
+| `parseReasoningTemplateSupport`, `REASONING_PARAM_KEYS`, `looksLikeReasoningRejection` | `script.js` | `28483fc` | unchanged |
+| `buildReasoningParams` | `script.js` | `28483fc` | external-endpoint path only (no wllama kwargs path) |
+| `probeReasoningSupport` → `probeTemplateCaps` | `script.js` | `28483fc` | the copied `/props` and Ollama `/api/show` probes are `probeTemplateCaps`, which also reads the context size (llama.cpp's `n_ctx`, Ollama's `num_ctx`) and tool-call support; `probeReasoningSupport` wraps it and falls back to the model list (vLLM, LM Studio, OpenRouter-style); runs automatically before the first request |
+| `fetchAndStreamChat` → `streamChat` | `script.js` | `28483fc` | API path only; returns `{finishReason, usage, rawUsage, timings, clock}` instead of callbacks; strip-and-retry of reasoning params kept; a stream that ends without `finish_reason`/`[DONE]`, an empty answer, or 3 min of silence after data started throw retryable errors (`requestWithRetry`) |
+| Test Connection handler → `testConnection` | `script.js` | `28483fc`, hint URL `d73993c` | no vision detection; also probes reasoning support |
+| `showToast` | `script.js` | `28483fc` | unchanged |
+| Debug console (`setDebugConsole`, `#debugConsole` markup and CSS) | `script.js`, `index.html`, `style.css` | `28483fc` | logs agent tool calls instead of wllama output; filter instead of verbosity; no tab, Escape closes |
+| `tests/check.mjs`, `tests/run.mjs`, the `extract.mjs` approach | `../tests/` | `28483fc` | extractor also slices `async function`s |
+| `build.py` techniques (SRI-verified downloads, gzip+base64 inlining, `</script` escaping, Inter woff2 inlining) | `../build.py` | `28483fc` | rewritten for one output; Pyodide pinned by sha256; CSP swapped for a strict one |
 
 ---
 
@@ -1288,9 +1290,9 @@ hermit-agent/
 └── dist/         hermit-agent-standalone.html (committed, like HermitUI's dist/)
 ```
 
-- **Sharing code:** copy and adapt from `../src/` for now. Keep a "copied from
-  HermitUI" list (function, source commit) in `AGENTS.md` so fixes can be carried
-  over in either direction. Don't import across folders until the merge decision.
+- **Sharing code:** copy and adapt from `../src/` for now. Keep the list of copied
+  functions (function, source commit) in §9 so fixes can be carried over in either
+  direction. Don't import across folders until the merge decision.
 - **The root build is unaffected:** `../build.py` never reads `hermit-agent/`, and
   GitHub Pages keeps serving the root `index.html`. The agent's `dist/` will be
   reachable at `…/HermitUI/hermit-agent/dist/hermit-agent-standalone.html` for free.

@@ -348,7 +348,7 @@ Waits poll `page.evaluate()` instead, which goes through the browser protocol.
 ## Real model — `e2e_reference.py`
 
 The success measurement (Phase 2a; its first three tasks are the Phase 1 exit
-criterion). A real model does 24 tasks in the built app under risk-based supervision:
+criterion). A real model does 27 tasks in the built app under risk-based supervision:
 data processing, code plus tests, calculation, fixing a bug in an uploaded file, a JSON
 transform, word frequencies, log analysis, code from a spec, a matplotlib chart, a
 pandas pivot, renaming a setting across two uploaded files, SQLite, counting, dates and
@@ -364,7 +364,7 @@ beautifulsoup4) and a QR code (decoded with OpenCV), plus an OpenDocument spread
 of region totals (read with pandas' ODF engine; odfpy was bundled later). For those,
 whether the agent's code
 used a bundled library is recorded (`library_used`) but doesn't decide the pass. Phase
-3.6 added two (27 in all): renaming a function across a small project with folders
+3.6 added the last two: renaming a function across a small project with folders
 (no file may still name it, and the project's tests must pass) and tidying up your files
 (CSVs into `data/`, a PNG into `assets/` byte for byte, the `.tmp` files deleted); which
 file tools the agent used is recorded (`tools_used`), not required. Since Phase 3.7 every

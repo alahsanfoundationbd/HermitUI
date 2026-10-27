@@ -52,7 +52,7 @@ DESIGN §8. Details: [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md).
 Scaffold the folder per §11 (`src/`, `build.py`, `tests/`, `dist/`), then:
 
 - [x] **Settings & connection:** base URL, model, API key (memory only), Test
-      Connection. Copied from HermitUI and listed in AGENTS.md.
+      Connection. Copied from HermitUI and listed in §9.
 - [x] **Agent loop:** code-as-action parsing, observation envelope, truncation, step
       limit, per-step timeout, final answer and `ask:` handling (§5).
 - [x] **Worker runner:** persistent namespace, stdout/stderr capture, workspace

@@ -4,7 +4,7 @@
 sentences or paragraphs reworded by your own local model (or the whole text rewritten
 in several passes), and a few natural typos.*
 
-> **Status: v0.4.8.** One self-contained HTML file in two flavours:
+> **Status: v0.4.9.** One self-contained HTML file in two flavours:
 > [`dist/hermit-cleaner-standalone.html`](dist/hermit-cleaner-standalone.html) (≈ 380 KB)
 > rewords through a model server, and
 > [`dist/hermit-cleaner-wllama.html`](dist/hermit-cleaner-wllama.html) (≈ 3.6 MB) can also

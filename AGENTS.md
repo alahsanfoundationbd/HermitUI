@@ -24,7 +24,7 @@ HermitUI is a private chat UI for OpenAI-compatible endpoints that ships as one 
 - `build.py` downloads the libraries pinned by the CDN tags in `src/index.html` into `libs/`, verifies them against the tags' `integrity` hashes (where set) and swaps the tags by regex. When you change a CDN tag, keep its regex matching and its `integrity` hash current (`--refresh` re-downloads); the build exits loudly otherwise.
 - Mermaid and the wllama engine are inlined gzip+base64 (`window.__MERMAID_INLINE__`, `window.__WLLAMA_INLINE__`) and inflated in the browser (`gunzipToBytes`). Mermaid's version lives only in its CDN tag, wllama's in `WLLAMA_CDN_BASE` (`src/script.js`; the unbuilt source imports it from jsDelivr instead).
 - wllama-only code in `src/` sits between `@wllama:start` / `@wllama:end` markers (`<!-- -->`, `/* */`, `//`). The build strips these blocks from every other output, so the code left over must stay valid.
-- No linter, no package manager. `node tests/run.mjs` tests pure logic by slicing functions out of `src/script.js` by name (`tests/extract.mjs`), so renaming a tested function fails the suite; update the tests with it. DOM behaviour belongs in the end-to-end tests, which read `dist/` (build first): `benchmark/.venv/bin/python tests/e2e_rendering.py` and `tests/e2e_export_import.py`. Details in `tests/README.md`. Check UI changes in the built `index.html`.
+- No linter, no package manager. `node tests/run.mjs` tests pure logic by slicing functions out of `src/script.js` by name (`tests/extract.mjs`), so renaming a tested function fails the suite; update the tests with it. The slicer counts raw braces: an unbalanced `{` or `}` in a sliced function's string, regex or comment breaks the suite. DOM behaviour belongs in the end-to-end tests, which read `dist/` (build first): `benchmark/.venv/bin/python tests/e2e_rendering.py`, `tests/e2e_export_import.py` and `tests/e2e_chat_features.py`. Details in `tests/README.md`. Check UI changes in the built `index.html`.
 
 ## Code map (`src/script.js`)
 - Personas: `PERSONAS`, `switchPersona`, `activePersona`/`SYSTEM_PROMPT`.
@@ -65,7 +65,7 @@ A Playwright harness that runs GGUF ladders (Qwen3, Gemma-4, gpt-oss-20b) throug
 - After bumping `WLLAMA_CDN_BASE`, rerun and compare against the reference results.
 
 ## Sibling apps
-`hermit-agent/` (a supervised agent that writes and runs Python in the tab via Pyodide) and `hermit-cleaner/` (cleans AI-written text down to Latin-1 and can reword it) have their own `src/`, `build.py`, `tests/` and an `AGENTS.md` that extends this file; read it before working there. They never touch the root `src/`, and the root build doesn't build them.
+`hermit-agent/` (a supervised agent that writes and runs Python in the tab via Pyodide) and `hermit-cleaner/` (cleans AI-written text down to Latin-1 and can reword it) have their own `src/`, `build.py`, `tests/` and an `AGENTS.md` that extends this file; read it before working there. They never touch the root `src/`, and the root build doesn't build them. Both keep copies of some root functions, listed with their source commit (hermit-agent: `DESIGN.md` §9; hermit-cleaner: its `AGENTS.md`): when you fix one of those here, say whether the copies need the fix too.
 
 ## Git & workflow
 - Always check origin for new changes before starting a task.

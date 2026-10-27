@@ -1,5 +1,5 @@
 // Minimal assertion helper shared by the unit test files. Deliberately not a test
-// framework: no dependencies, no install step, no watch mode — just a pass/fail
+// framework: no dependencies, no install step, no watch mode: just a pass/fail
 // counter and a non-zero exit code, which is all CI (and a human) needs here.
 let pass = 0, fail = 0;
 

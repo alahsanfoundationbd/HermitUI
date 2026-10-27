@@ -1,6 +1,6 @@
 // Runs every node-only test file and reports an aggregate result:
 //   node tests/run.mjs
-// The Playwright end-to-end tests (e2e_*.py) are deliberately not included —
+// The Playwright end-to-end tests (e2e_*.py) are deliberately not included:
 // they need a build and a virtualenv. Run them separately; see tests/README.md.
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
@@ -12,7 +12,7 @@ const files = readdirSync(here).filter(f => f.endsWith(".test.mjs")).sort();
 
 let failed = [];
 for (const f of files) {
-    console.log(`\n──────── ${f} ────────`);
+    console.log(`\n-------- ${f} --------`);
     const r = spawnSync(process.execPath, [join(here, f)], { stdio: "inherit" });
     if (r.status !== 0) failed.push(f);
 }

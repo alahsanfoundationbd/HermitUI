@@ -1,7 +1,7 @@
 // ========== HermitUI Agent — main thread ==========
 // Layout of this file:
 //   1. Configuration
-//   2. Helpers copied from HermitUI (see AGENTS.md "Copied from HermitUI")
+//   2. Helpers copied from HermitUI (listed in DESIGN.md §9)
 //   3. Agent logic (pure, unit-tested via tests/extract.mjs)
 //   4. Zip + session archive (pure, unit-tested)
 //   5. Python worker client
@@ -13,7 +13,7 @@
 // of this file by name.
 
 // ========== 1. Configuration ==========
-const APP_VERSION = "0.3.25";
+const APP_VERSION = "0.3.26";
 const PYODIDE_VERSION = "0.29.5";
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.29.5/full/";
 // Pure-Python libraries bundled into the HTML (Phase 3.5, DESIGN §8). Pyodide leaves
