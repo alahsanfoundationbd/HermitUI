@@ -372,8 +372,6 @@ const CHAPTERS = {
         [15.15, "Trying the CLI fails three times"], [18.85, "Fixes cli.py"], [20.27, "Checks every CLI command"], [24.89, "Sums it up, plan done"]],
 };
 
-const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 for (const video of document.querySelectorAll("video")) {
     const toggle = document.querySelector(`.toggle[data-video="${video.id}"]`);
     const list = document.querySelector(`.steps[data-video="${video.id}"]`);
@@ -401,10 +399,8 @@ for (const video of document.querySelectorAll("video")) {
     video.addEventListener("play", label);
     video.addEventListener("pause", label);
     toggle.addEventListener("click", () => (video.paused ? video.play() : video.pause()));
-    // Play only while on screen, and never on its own when reduced motion is asked for.
-    if (!reduceMotion) {
-        new IntersectionObserver(([e]) => (e.isIntersecting ? video.play().catch(() => {}) : video.pause()), { threshold: 0.35 }).observe(video);
-    }
+    // Play only while on screen; the Pause button stops it.
+    new IntersectionObserver(([e]) => (e.isIntersecting ? video.play().catch(() => {}) : video.pause()), { threshold: 0.35 }).observe(video);
     label();
 }
 </script>
