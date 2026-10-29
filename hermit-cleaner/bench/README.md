@@ -77,7 +77,7 @@ Sentences the app removes outright (nothing but stock phrases) have no rewrite; 
 stock phrases count as removed, and they count as accepted.
 
 Speeds are those of llama-server on the GPU, not of the browser. For in-browser
-speed, use `--backend wllama` or see the table in `../README.md`.
+speed, use `--backend wllama` or see the table in `../docs/guide.md`.
 
 ## Things learned building it
 
@@ -113,7 +113,7 @@ benchmark read side by side. The language finding is the first item above.
   German but changes ~23 % even at Light.
 - **Stock phrases (2026-10-09, 4 models x 11 texts x 3 levels x 2 runs):**
   - Naming the phrases found beats a fixed example list: at Light the share removed rose
-    from 35-68 % to 70-89 % (the table in `../README.md`), at no extra meaning or grammar
+    from 35-68 % to 70-89 % (the table in `../docs/guide.md`), at no extra meaning or grammar
     cost on Gemma-4 E2B. The best-guess list alone (before the research) got 56-82 %.
   - Told to cut a sentence that is only a stock phrase but "keep every sentence",
     Qwen3-4B answered "This email finds you well." and Qwen3-1.7B "This email hopes
