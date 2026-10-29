@@ -1,6 +1,6 @@
 # HermitUI Backlog
 
-Upcoming features, tasks, and ideas. The headline items are summarized in the README's [Roadmap](../README.md#-roadmap).
+Upcoming features, tasks, and ideas. The headline items are summarized in the guide's [Roadmap](guide.md#roadmap).
 
 ## 📝 To-Do
 
