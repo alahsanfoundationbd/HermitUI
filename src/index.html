@@ -23,10 +23,10 @@
 <body>
 
     <!-- @wllama:start -->
-    <!-- Quake-style debug console: drops down from the top of the screen (toggle via the 🐛 header button or the tab) -->
+    <!-- Quake-style debug console: drops down from the top of the screen (toggle via the 🌐 header button or the tab) -->
     <div id="debugConsole">
         <div id="debugConsoleHeader">
-            <span class="dc-title">🐛 Debug Console</span>
+            <span class="dc-title">🌐  Debug Console</span>
             <label class="dc-verbose" for="wllamaVerbosity">Verbosity
                 <select id="wllamaVerbosity" title="How much wllama detail to show">
                     <option value="0">Off</option>
@@ -49,7 +49,7 @@
         <div class="header-left">
             <h2>HermitUI <span class="version-badge">v0.9.2</span></h2>
             <div class="model-badge" title="Current Model">
-                🤖 <span id="overlayModel">local-model</span> @ <span id="overlayUrl">http://localhost:1234</span>
+                🌐  <span id="overlayModel">local-model</span> @ <span id="overlayUrl">http://localhost:1234</span>
             </div>
         </div>
         <div class="header-center">
@@ -58,9 +58,9 @@
         </div>
         <div class="header-actions">
             <!-- @wllama:start -->
-            <button class="header-btn icon-only" id="debugToggleBtn" title="Debug Console" aria-label="Toggle Debug Console">🐛</button>
+            <button class="header-btn icon-only" id="debugToggleBtn" title="Debug Console" aria-label="Toggle Debug Console">🌐 </button>
             <!-- @wllama:end -->
-            <button class="header-btn icon-only" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle Theme">🌙</button>
+            <button class="header-btn icon-only" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle Theme">💡</button>
             <button class="header-btn icon-only" id="exportBtn" title="Export Chat (Ctrl+E)" aria-label="Export Chat">📤</button>
             <button class="header-btn icon-only" id="importBtn" title="Import Chat (Ctrl+I)" aria-label="Import Chat">📂</button>
             <input type="file" id="importFileInput" accept=".md,.markdown,.txt,text/markdown" style="display: none;">
