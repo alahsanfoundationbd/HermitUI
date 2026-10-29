@@ -10,7 +10,7 @@
   <p>
     <a href="https://moooff.github.io/HermitUI/hermit-agent/"><b>Project page</b></a> •
     <a href="#try-it">Try it</a> •
-    <a href="#how-you-supervise-it">Supervision</a> •
+    <a href="#how-you-stay-in-control">Supervision</a> •
     <a href="#what-it-can-make">Files it makes</a> •
     <a href="#what-leaves-your-machine">What leaves your machine</a> •
     <a href="#documents">Documents</a>
@@ -31,71 +31,52 @@
   </a>
 </div>
 
-> **Status: v0.3.27** (Phase 3.7, a plan you can see). One self-contained HTML file,
+> **Status: v0.3.28** (Phase 3.7, a plan you can see). One self-contained HTML file,
 > [`dist/hermit-agent-standalone.html`](dist/hermit-agent-standalone.html) (about 11 MB,
-> Python included). It is developed here, separately from the main app in
-> [`../src/`](../src/), so it can move fast without destabilising HermitUI.
+> Python included), developed in this folder apart from the main app in [`../src/`](../src/).
 
-Give it a task, like "clean up these CSVs and chart the monthly totals", "write and test a parser for this log format" or "check this calculation numerically". The agent writes Python, runs it against a virtual file system in the tab, reads the output and decides the next step, until the task is done. It can also search, read, write, edit, move and delete files directly, without Python; a CSV that Excel saved as Windows-1252 stays Windows-1252 when it edits it.
+Give it a task, like "clean up these CSVs and chart the monthly totals" or "write and test a parser for this log format". The agent writes Python, runs it on the files in its workspace, reads the output and picks the next step until the task is done. It can also read, write, edit, move and delete files without Python, and a CSV that Excel saved as Windows-1252 stays Windows-1252.
 
-It works with any OpenAI-compatible server: llama.cpp, Ollama, LM Studio, vLLM, or a cloud API if you pick one. Nothing to install, and nothing is stored: close the tab and the workspace disappears.
+It works with llama.cpp, Ollama, LM Studio, vLLM or a cloud API. There is nothing to install and nothing is stored: close the tab and the workspace is gone.
 
 ## Try it
 
-1. Start an OpenAI-compatible server that allows browser requests (CORS). For
-   example, llama.cpp: `llama-server -m model.gguf --jinja --port 9931`. Any
-   OpenAI-compatible cloud API works too, but then the task and what the agent
-   prints go to that provider.
-2. Open [`dist/hermit-agent-standalone.html`](https://moooff.github.io/HermitUI/hermit-agent/dist/hermit-agent-standalone.html),
-   or download it and double-click the file. No server is needed for the page itself,
-   and Python boots offline in about a second.
-3. Open Settings and set the API Base URL (default `http://localhost:9931/v1`), the
-   model and, if needed, the key. **Test Connection** checks them.
+1. Start an OpenAI-compatible server that allows browser requests (CORS), e.g. `llama-server -m model.gguf --jinja --port 9931`. A cloud API works too, but then the task and what the agent prints go to that provider.
+2. Open [`dist/hermit-agent-standalone.html`](https://moooff.github.io/HermitUI/hermit-agent/dist/hermit-agent-standalone.html), or download it and double-click the file. Python starts offline in about a second.
+3. In Settings, set the API Base URL (default `http://localhost:9931/v1`), the model and, if needed, the key. **Test Connection** checks them.
 4. Drop files into the workspace, describe the task, and press **Start**.
 
-**A server on another device** (the agent on a phone, the model on a computer at home):
-the server has to listen on the network (llama.cpp `--host 0.0.0.0`), and the hosted page
-is https while a LAN server is usually plain http, which browsers block as mixed content.
-Chrome asks to allow local network access instead (on Android, Chrome first needs Android's
-"Nearby devices" or "Local network" permission under Settings → Apps → Chrome); elsewhere, open the agent over http
-from the server itself (put `hermit-agent-standalone.html` into a folder as `index.html`,
-start llama.cpp with `--path <that folder>`, open `http://<server-ip>:<port>/` and use
-`http://<server-ip>:<port>/v1` as the API Base URL), or give the server https, e.g. with
-`tailscale serve`. Settings for other servers are in
-[HermitUI's README](../README.md#a-server-on-another-device-phone-tablet-second-pc).
+You need a model that can fix its own mistakes. The reference tasks pass with Qwen3.8-27B at reasoning effort Low (see [ROADMAP.md](ROADMAP.md)). If the server drops mid-task, the agent retries for two minutes and then pauses; nothing is lost, and Retry carries on.
 
-The agent needs a model that can recover from its own errors. The reference tasks pass with Qwen3.8-27B at reasoning effort Low (see [ROADMAP.md](ROADMAP.md)). If the server drops mid-task, the agent retries for two minutes and then pauses: nothing is lost, and Retry resumes where it stopped.
+The model can also run on another computer, with the agent on a phone, for example. Browsers then block the https page from calling a plain http server, so open the agent over http from the server itself, give the server https (e.g. `tailscale serve`), or let Chrome allow local network access. The steps are in [HermitUI's README](../README.md#a-server-on-another-device-phone-tablet-second-pc); for the agent, the API Base URL ends in `/v1`.
 
-## How you supervise it
+## How you stay in control
 
 <div align="center">
   <img src="site/demo-fix.webp" alt="The agent finds two bugs, its edits to the user's files are held for approval with a diff, and after approval main.py prints the expected totals" width="880" />
   <p><i>Two bugs in two files. The edits wait for approval, with the diff shown, before they touch the files you uploaded.</i></p>
 </div>
 
-- **Every step is visible:** the model's reasoning, the precise code, the result, the graphs and pictures it created, and a diff of the modified files.
-- **Risky steps wait for you.** Harmless steps run on their own. A step that deletes, overwrites or moves one of your files, or tries to reach the network, stays put until you approve it.
-- **You see where it is going.** On longer tasks the agent keeps a short plan, pinned above the steps, and ticks steps off as it goes. A note from you changes its course; it then updates the plan. Set supervision to **Plan first** and it shows you the plan before it changes anything.
-- **It doesn't go round in circles.** If the agent sends the same code or file actions a third time in a row, that step isn't run and the agent is told why; a fourth pauses the run for you. The same goes for small variations that keep failing with the same error: on the third the agent is told to change course, on the fifth the run pauses.
-- **Every step can be undone.** The workspace saves a checkpoint after each step, and you can rewind to any of them, or back to the start to rephrase the task.
-- **It can't touch your machine.** Python runs as WebAssembly (Pyodide) in a Web Worker. The agent only sees the in-memory workspace where you put files.
-- **Sessions go where you put them.** Export a whole session (conversation, steps, workspace, checkpoints) to one zip file and import it later to resume or review it. The app itself remembers nothing.
+- **You see every step:** the model's reasoning, the code, the result, any charts or images, and a diff of the changed files.
+- **Risky steps wait for you.** Harmless steps run on their own. A step that deletes, overwrites or moves one of your files, or tries to reach the network, waits until you approve it.
+- **You see the plan.** On longer tasks the agent keeps a short plan above the steps and ticks it off. A note from you changes its course. With supervision set to **Plan first**, it shows you the plan before it changes anything.
+- **It doesn't loop.** The same code three times in a row is not run, and the agent is told why; a fourth time pauses the run. Repeated failures with the same error get the same treatment ([DESIGN §5.8](DESIGN.md#58-the-loop-guard-added-in-v0314)).
+- **You can undo any step.** The workspace is saved after each step, and you can go back to any of them, or to the start to rephrase the task.
+- **It can't touch your machine.** Python runs as WebAssembly (Pyodide) in a Web Worker and sees only the files you put into the workspace.
+- **Sessions are files.** Export a session (conversation, steps, workspace, checkpoints) as one zip and import it later. The app itself remembers nothing.
 
 <div align="center">
   <img src="site/demo-app.webp" alt="The agent builds a small library-loans app from a written spec: it writes the package and the CLI with a nine-step plan pinned above the steps, ticks the plan off, fixes the CLI after three failed tries, and finishes with all eleven tests passing" width="880" />
-  <p><i>A small app from a written spec. The plan remains pinned above the steps, and the agent checks it off as it goes.</i></p>
+  <p><i>A small app from a written spec. The plan stays above the steps, and the agent ticks it off as it goes.</i></p>
 </div>
 
-The agent acts through native tool calls (OpenAI `tools`) when the endpoint supports
-them (llama.cpp with `--jinja`, Ollama models with tool support), and through
-```` ```python ```` blocks and file tags in its reply with any other chat model. Settings →
-**Actions** picks one explicitly; a server that refuses tool calls falls back on its own.
+The agent uses native tool calls where the server supports them (llama.cpp with `--jinja`, Ollama models with tool support) and ```` ```python ```` blocks in its reply with any other model ([DESIGN §5.6](DESIGN.md#56-native-tool-calls-built-in-phase-3)).
 
 ## What it can make
 
-Packages like numpy, pandas and matplotlib load on demand from the pinned Pyodide CDN. The standard library works offline, except sqlite3, lzma and ssl, which Pyodide ships as separate packages from the same CDN.
+numpy, pandas, matplotlib and other Pyodide packages load on demand from the pinned Pyodide CDN. The standard library works offline, except sqlite3, lzma and ssl, which come from the same CDN.
 
-Eleven pure-Python libraries that Pyodide leaves out ship inside the file:
+Eleven pure-Python libraries that Pyodide leaves out are inside the file:
 
 | Format | Library |
 |---|---|
@@ -107,25 +88,20 @@ Eleven pure-Python libraries that Pyodide leaves out ship inside the file:
 | Tables, XML, QR codes | tabulate, xmltodict, qrcode |
 | Charts | seaborn (with matplotlib from the CDN) |
 
-Those that need no Pyodide package (openpyxl, XlsxWriter, odfpy, Markdown, tabulate,
-xmltodict) work offline too.
+openpyxl, XlsxWriter, odfpy, Markdown, tabulate and xmltodict need no Pyodide package, so they work offline too.
 
 ## What leaves your machine
 
-There is no telemetry: no analytics, crash reporting, or usage pings, and opening the standalone file makes no network request at all. Using it sends exactly this:
+There is no telemetry, and opening the file makes no network request. Using it sends this, and nothing else:
 
-- **To the API Base URL you configured:** the conversation, including what the agent reads from your files and what its code prints, plus the API key. Before the first request, and again when the URL or model changes, the app also asks that server what it supports (`/models`, `/props`, `/api/show`), as does **Test Connection**.
-- **To jsDelivr (`cdn.jsdelivr.net/pyodide/...`):** only if agent code pulls in a Pyodide package not built into the file, such as numpy or pandas. It's a simple download: jsDelivr sees your IP address and the package name, never the task or your files.
+- **To the API Base URL you set:** the conversation, including what the agent reads from your files and what its code prints, plus the API key. Before the first request, and when the URL or model changes, the app also asks the server what it supports (`/models`, `/props`, `/api/show`), as does **Test Connection**.
+- **To jsDelivr (`cdn.jsdelivr.net/pyodide/...`):** only when agent code needs a Pyodide package that isn't in the file, such as numpy or pandas. jsDelivr sees your IP address and the package name, never the task or your files.
 
-Agent code stays off the network on a best-effort basis: 17 known paths are tested and closed (DESIGN §10), yet it is a denylist, not a guarantee. Don't put secrets in the workspace that you couldn't afford to leak.
-
-The unbuilt `src/index.html` additionally loads its libraries and the Inter font from
-jsDelivr, cdnjs and Google Fonts on every page load, and fetches the Python core and
-the bundled libraries from jsDelivr and PyPI; `dist/` has all of these inlined.
+Blocking the network for agent code is best effort: 17 known paths are tested and closed ([DESIGN §10](DESIGN.md#10-security)), but it is a denylist, not a guarantee. Don't put secrets in the workspace that you couldn't afford to leak. (The unbuilt `src/index.html` also loads its libraries and font from CDNs; `dist/` has them inlined.)
 
 ## Relationship to HermitUI
 
-It keeps the same brand and philosophy: one HTML file, vanilla JS, no persistence, and any OpenAI-compatible endpoint. The code reuses a lot of HermitUI's tested parts (streaming, think-tag parsing, settings, error hints, and inline build machinery; the full list is in [DESIGN.md §9](DESIGN.md#9-reuse-map-from-hermitui)). It sits in its own folder with a separate `src/`, `build.py`, and `tests/`, and could merge back into HermitUI later as a build flavor or mode. Check [DESIGN.md §11](DESIGN.md#11-project-layout--merge-path).
+Same idea as HermitUI: one HTML file, vanilla JS, nothing stored, any OpenAI-compatible server. It reuses many of HermitUI's tested parts ([DESIGN §9](DESIGN.md#9-reuse-map-from-hermitui)) and lives in its own folder, so it could later merge back as a mode ([DESIGN §11](DESIGN.md#11-project-layout--merge-path)).
 
 ## Documents
 
