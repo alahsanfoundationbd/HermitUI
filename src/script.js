@@ -2140,12 +2140,31 @@ Rules:
         }
 
         // Normalize a base URL (or a pasted full chat endpoint) to the given API path.
+        function extractErrorMessage(errBody, fallback) {
+            if (!errBody) return fallback;
+            if (Array.isArray(errBody) && errBody.length > 0) {
+                const item = errBody[0];
+                return item?.error?.message || (typeof item?.error === "string" ? item.error : null) || item?.message || fallback;
+            }
+            if (typeof errBody === "object") {
+                return errBody.error?.message || (typeof errBody.error === "string" ? errBody.error : null) || errBody.message || fallback;
+            }
+            return fallback;
+        }
+
+        // Normalize a base URL (or a pasted full chat endpoint) to the given API path.
         function apiEndpoint(base, path) {
             let url = base.trim().replace(/\/+$/, "");
             // Tolerate a pasted full endpoint of any known kind, so a base left pointing at
             // /models can't produce ".../models/chat/completions". Longest suffix first.
             for (const known of ["/chat/completions", "/completions", "/models"]) {
                 if (url.endsWith(known)) { url = url.slice(0, -known.length); break; }
+            }
+            if (/generativelanguage\.googleapis\.com/i.test(url)) {
+                url = url.replace(/\/v1beta\/openai\/?$/, "")
+                         .replace(/\/v1beta\/?$/, "")
+                         .replace(/\/openai\/?$/, "");
+                url = url + "/v1beta/openai";
             }
             if (!url.endsWith(path)) url += path;
             return url;
@@ -2260,7 +2279,7 @@ Rules:
 
                 if (!response.ok) {
                     let detail = response.statusText || "Unknown Error";
-                    try { detail = (await response.json()).error?.message || detail; } catch { /* not JSON */ }
+                    try { detail = extractErrorMessage(await response.json(), detail); } catch { /* not JSON */ }
                     throw new Error(`Server Error ${response.status}: ${detail}`);
                 }
 
@@ -2330,6 +2349,28 @@ Rules:
             updateVisionBadge();
         });
         document.getElementById("settingModelInput").addEventListener("input", updateVisionBadge);
+
+        document.querySelectorAll(".preset-pill").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const url = btn.dataset.url;
+                const model = btn.dataset.model;
+                if (url) {
+                    const urlInput = document.getElementById("settingUrl");
+                    urlInput.value = url;
+                    urlInput.dispatchEvent(new Event("input"));
+                }
+                if (model) {
+                    const input = document.getElementById("settingModelInput");
+                    const select = document.getElementById("settingModelSelect");
+                    if (input) input.value = model;
+                    if (select) {
+                        select.style.display = "none";
+                        input.style.display = "block";
+                    }
+                    updateVisionBadge();
+                }
+            });
+        });
 
         // ========== Summary bubbles (shared by Summarize, Export and Import) ==========
         // A summary is a session artifact, not a turn of the conversation: it is kept
@@ -3445,7 +3486,7 @@ Rules:
                     let detail = res.statusText || "Unknown Error";
                     try {
                         const errBody = await res.json();
-                        detail = errBody.error?.message || detail;
+                        detail = extractErrorMessage(errBody, detail);
                     } catch (e) {}
                     return detail;
                 };

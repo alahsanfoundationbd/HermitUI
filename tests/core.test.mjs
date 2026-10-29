@@ -115,6 +115,12 @@ section("3. API endpoint normalization");
         apiEndpoint("http://localhost:1234/v1/models", "/chat/completions") === "http://localhost:1234/v1/chat/completions");
     check("a pasted legacy /completions endpoint is not doubled",
         apiEndpoint("http://localhost:1234/v1/completions", "/chat/completions") === "http://localhost:1234/v1/chat/completions");
+    check("gemini domain auto-routes to /v1beta/openai chat endpoint",
+        apiEndpoint("https://generativelanguage.googleapis.com", "/chat/completions") === "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    check("gemini /v1beta path auto-routes to /v1beta/openai models endpoint",
+        apiEndpoint("https://generativelanguage.googleapis.com/v1beta", "/models") === "https://generativelanguage.googleapis.com/v1beta/openai/models");
+    check("gemini /v1beta/openai path preserved without duplication",
+        apiEndpoint("https://generativelanguage.googleapis.com/v1beta/openai", "/chat/completions") === "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
 }
 
 // fetch() resolves a scheme-less URL against the page, so on a hosted copy

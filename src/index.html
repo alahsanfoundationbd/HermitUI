@@ -188,6 +188,14 @@
             <div id="apiSettingsGroup">
             <!-- @wllama:end -->
             <label for="settingUrl">API Base URL</label>
+            <div class="api-presets">
+                <button type="button" class="preset-pill" data-url="https://generativelanguage.googleapis.com/v1beta/openai" data-model="gemini-2.5-flash">✨ Google Gemini</button>
+                <button type="button" class="preset-pill" data-url="https://api.groq.com/openai/v1" data-model="llama-3.3-70b-versatile">⚡ Groq</button>
+                <button type="button" class="preset-pill" data-url="https://openrouter.ai/api/v1" data-model="google/gemini-2.5-flash">🌐 OpenRouter</button>
+                <button type="button" class="preset-pill" data-url="https://api.openai.com/v1" data-model="gpt-4o-mini">🟢 OpenAI</button>
+                <button type="button" class="preset-pill" data-url="http://localhost:11434/v1" data-model="">🦙 Ollama</button>
+                <button type="button" class="preset-pill" data-url="http://localhost:1234/v1" data-model="">💻 LM Studio</button>
+            </div>
             <input type="text" id="settingUrl" value="http://localhost:1234/v1">
             <div id="cloudWarning" style="display: none; background: rgba(254, 243, 199, 0.8); color: #92400e; padding: 10px 12px; margin-bottom: 12px; border-radius: 8px; font-size: 0.85rem; border: 1px solid #fcd34d; align-items: flex-start; gap: 8px;">
                 <span style="font-size: 1.1rem; flex-shrink: 0;">⚠️</span>
